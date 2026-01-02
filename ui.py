@@ -22,6 +22,7 @@ class ConverterUI:
         self.selected_file_names: dict = {}  # 存储原始文件名映射 {path: original_name}
         self.is_file_mode = True
         self.is_converting = False
+        self.output_dir: Optional[Path] = None
         
         # UI 组件
         self.file_btn = None
@@ -30,6 +31,9 @@ class ConverterUI:
         self.folder_upload = None
         self.selected_files_label = None
         self.quality_select = None
+        self.output_dir_input = None
+        self.output_dir_btn = None
+        self.output_dir_label = None
         self.convert_btn = None
         self.progress_bar = None
         self.status_label = None
@@ -221,6 +225,27 @@ class ConverterUI:
                 with ui.row().style("width: 100%; justify-content: center;"):
                     ui.label("更高的比特率意味着更好的音质，但文件也会更大").classes("info-text")
             
+            # 输出目录选择区域
+            with ui.column().classes("form-group"):
+                with ui.row().style("width: 100%; justify-content: center;"):
+                    ui.label("输出目录").classes("text-weight-medium")
+                
+                with ui.row().style("width: 100%; justify-content: center; max-width: 500px; gap: 10px;"):
+                    self.output_dir_input = ui.input(
+                        label="MP3 输出目录路径",
+                        placeholder="例如: C:/Users/username/Music/MP3 或 /Users/username/Music/MP3",
+                        value="",
+                        on_change=self._validate_output_dir
+                    ).style("flex: 1;")
+                    self.output_dir_btn = ui.button(
+                        "验证",
+                        on_click=self._validate_output_dir_click,
+                        icon="check"
+                    ).props("outline")
+                
+                with ui.row().style("width: 100%; justify-content: center;"):
+                    self.output_dir_label = ui.label("请输入 MP3 文件的输出目录").classes("text-caption text-grey-6")
+            
             # 转换按钮
             with ui.row().style("width: 100%; justify-content: center; margin-top: 10px;"):
                 self.convert_btn = ui.button(
@@ -266,34 +291,61 @@ class ConverterUI:
         self.selected_files_label.classes("empty", remove="")
         ui.notify("提示：请选择文件夹中的所有 FLAC 文件", type="info")
     
-    def _get_mp3_output_dir(self, file_or_folder_path: Path) -> Path:
-        """
-        根据选择的文件或文件夹，确定 mp3 输出目录
+    def _validate_output_dir(self, e=None):
+        """验证输出目录路径"""
+        if not self.output_dir_input.value:
+            self.output_dir_label.text = "请输入 MP3 文件的输出目录"
+            self.output_dir_label.classes(remove="text-green text-red")
+            self.output_dir = None
+            return
         
-        Args:
-            file_or_folder_path: 选择的文件或文件夹路径
-        
-        Returns:
-            mp3 输出目录路径
-        """
-        # 如果是文件，获取其父目录
-        if file_or_folder_path.is_file():
-            parent_dir = file_or_folder_path.parent
+        try:
+            path = Path(self.output_dir_input.value.strip())
+            if path.exists() and path.is_dir():
+                # 验证目录是否可写
+                test_file = path / ".test_write"
+                try:
+                    test_file.touch()
+                    test_file.unlink()
+                    self.output_dir = path
+                    self.output_dir_label.text = f"✓ 输出目录有效: {path}"
+                    self.output_dir_label.classes(remove="text-red")
+                    self.output_dir_label.classes("text-green")
+                except Exception:
+                    self.output_dir_label.text = f"✗ 目录不可写: {path}"
+                    self.output_dir_label.classes(remove="text-green")
+                    self.output_dir_label.classes("text-red")
+                    self.output_dir = None
+            elif not path.exists():
+                # 检查父目录是否存在
+                parent = path.parent
+                if parent.exists() and parent.is_dir():
+                    self.output_dir_label.text = f"⚠ 目录不存在，转换时将自动创建: {path}"
+                    self.output_dir_label.classes(remove="text-green text-red")
+                    self.output_dir = path  # 允许创建新目录
+                else:
+                    self.output_dir_label.text = f"✗ 路径无效，父目录不存在: {path}"
+                    self.output_dir_label.classes(remove="text-green")
+                    self.output_dir_label.classes("text-red")
+                    self.output_dir = None
+            else:
+                self.output_dir_label.text = f"✗ 路径不是目录: {path}"
+                self.output_dir_label.classes(remove="text-green")
+                self.output_dir_label.classes("text-red")
+                self.output_dir = None
+        except Exception as ex:
+            self.output_dir_label.text = f"✗ 路径格式错误: {str(ex)}"
+            self.output_dir_label.classes(remove="text-green")
+            self.output_dir_label.classes("text-red")
+            self.output_dir = None
+    
+    async def _validate_output_dir_click(self):
+        """点击验证按钮"""
+        self._validate_output_dir()
+        if self.output_dir:
+            ui.notify(f"输出目录已设置: {self.output_dir}", type="positive")
         else:
-            # 如果是文件夹，使用该文件夹
-            parent_dir = file_or_folder_path
-        
-        # 在父目录的同级创建 mp3 文件夹
-        # 例如: /Users/Music/FLAC/song.flac -> /Users/Music/mp3/
-        # 或: /Users/Music/FLAC/ -> /Users/Music/mp3/
-        grandparent_dir = parent_dir.parent
-        mp3_dir = grandparent_dir / "mp3"
-        
-        # 创建 mp3 目录（如果不存在）
-        mp3_dir.mkdir(parents=True, exist_ok=True)
-        
-        logger.info(f"MP3 输出目录: {mp3_dir}")
-        return mp3_dir
+            ui.notify("请检查输出目录路径是否正确", type="warning")
     
     def _handle_file_upload(self, e):
         """处理文件上传"""
@@ -456,10 +508,23 @@ class ConverterUI:
                 ui.notify(error_msg, type="warning")
                 return
             
-            # 确定 mp3 输出目录
-            # 使用第一个文件来确定输出目录
-            first_file = all_flac_files[0]
-            mp3_output_dir = self._get_mp3_output_dir(first_file)
+            # 检查输出目录
+            if not self.output_dir:
+                error_msg = "请先设置 MP3 输出目录"
+                print(f"[ERROR] {error_msg}")
+                ui.notify(error_msg, type="warning")
+                return
+            
+            # 确保输出目录存在
+            mp3_output_dir = self.output_dir
+            try:
+                mp3_output_dir.mkdir(parents=True, exist_ok=True)
+                print(f"[INFO] 输出目录已准备: {mp3_output_dir}")
+            except Exception as ex:
+                error_msg = f"无法创建输出目录: {mp3_output_dir} - {str(ex)}"
+                print(f"[ERROR] {error_msg}")
+                ui.notify(error_msg, type="negative")
+                return
             
             total = len(all_flac_files)
             self.log_area.push(f"找到 {total} 个 FLAC 文件，开始转换...")
