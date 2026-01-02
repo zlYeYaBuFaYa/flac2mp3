@@ -315,11 +315,11 @@ class ConverterUI:
             
             file_obj = e.file
             file_name = file_obj.name
-            file_path = Path(file_obj._path)  # NiceGUI 已经保存好的临时文件路径
+            temp_path = Path(file_obj._path)  # NiceGUI 的临时文件路径
             
             print(f"[INFO] 文件名: {file_name}")
             print(f"[INFO] 文件类型: {file_obj.content_type}")
-            print(f"[INFO] 临时路径: {file_path}")
+            print(f"[INFO] NiceGUI 临时路径: {temp_path}")
             
             # 检查文件扩展名
             if not file_name.lower().endswith('.flac'):
@@ -328,23 +328,43 @@ class ConverterUI:
                 ui.notify(msg, type="warning")
                 return
             
-            # 验证文件存在
-            if not file_path.exists():
-                error_msg = f"临时文件不存在: {file_path}"
+            # 验证临时文件存在
+            if not temp_path.exists():
+                error_msg = f"NiceGUI 临时文件不存在: {temp_path}"
                 print(f"[ERROR] {error_msg}")
                 ui.notify(error_msg, type="negative")
                 return
             
-            print(f"[SUCCESS] 文件已上传: {file_name} ({file_path.stat().st_size} 字节)")
+            # 将文件复制到持久的临时目录
+            # 因为 NiceGUI 的临时文件会被自动清理
+            import tempfile
+            import shutil
+            
+            persistent_temp_dir = Path(tempfile.gettempdir()) / "flac2mp3_uploads"
+            persistent_temp_dir.mkdir(exist_ok=True)
+            
+            # 使用原始文件名保存
+            persistent_file = persistent_temp_dir / file_name
+            
+            print(f"[INFO] 复制文件到持久目录: {persistent_file}")
+            shutil.copy2(temp_path, persistent_file)
+            
+            if not persistent_file.exists():
+                error_msg = f"复制文件失败: {persistent_file}"
+                print(f"[ERROR] {error_msg}")
+                ui.notify(error_msg, type="negative")
+                return
+            
+            print(f"[SUCCESS] 文件已保存: {file_name} ({persistent_file.stat().st_size} 字节)")
             
             # 添加到已选文件列表
-            # 直接使用 NiceGUI 保存的临时文件路径
-            if file_path not in self.selected_files:
-                self.selected_files.append(file_path)
+            # 使用持久化的文件路径
+            if persistent_file not in self.selected_files:
+                self.selected_files.append(persistent_file)
                 # 保存原始文件名映射
-                self.selected_file_names[file_path] = file_name
+                self.selected_file_names[persistent_file] = file_name
                 print(f"[INFO] 已添加到选择列表，当前共 {len(self.selected_files)} 个文件")
-                print(f"[INFO] 原始文件名: {file_name}")
+                print(f"[INFO] 持久路径: {persistent_file}")
             else:
                 print(f"[INFO] 文件已在列表中，跳过")
             
