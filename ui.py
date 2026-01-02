@@ -85,6 +85,7 @@ class ConverterUI:
             }
             .form-group {
                 margin-bottom: 30px;
+                text-align: center;
             }
             .form-group label {
                 display: block;
@@ -92,14 +93,18 @@ class ConverterUI:
                 font-size: 14px;
                 font-weight: 500;
                 margin-bottom: 10px;
+                text-align: center;
             }
             .file-selector {
                 display: flex;
                 gap: 10px;
                 margin-bottom: 20px;
+                justify-content: center;
             }
             .file-btn {
                 flex: 1;
+                max-width: 200px;
+                min-width: 150px;
                 padding: 14px 20px;
                 background: #f5f5f5;
                 border: 2px dashed #ddd;
@@ -128,6 +133,7 @@ class ConverterUI:
                 font-size: 13px;
                 color: #666;
                 min-height: 40px;
+                text-align: center;
             }
             .selected-files.empty {
                 color: #999;
@@ -137,6 +143,7 @@ class ConverterUI:
                 font-size: 12px;
                 color: #999;
                 margin-top: 8px;
+                text-align: center;
             }
             .convert-btn {
                 width: 100%;
@@ -167,18 +174,18 @@ class ConverterUI:
         
         with ui.card().classes("container"):
             # 标题区域
-            with ui.column().classes("header"):
-                ui.label("🎵 FLAC to MP3 转换器").classes("text-h4 text-weight-bold")
-                ui.label("轻松将 FLAC 音频文件转换为 MP3 格式").classes("text-body2 text-grey-7")
+            with ui.column().classes("header").style("text-align: center;"):
+                ui.label("🎵 FLAC to MP3 转换器").classes("text-h4 text-weight-bold").style("text-align: center;")
+                ui.label("轻松将 FLAC 音频文件转换为 MP3 格式").classes("text-body2 text-grey-7").style("text-align: center;")
             
             # 文件选择区域
-            with ui.column().classes("form-group"):
-                ui.label("选择文件或文件夹").classes("text-weight-medium")
+            with ui.column().classes("form-group").style("text-align: center;"):
+                ui.label("选择文件或文件夹").classes("text-weight-medium").style("text-align: center;")
                 
                 # 文件/文件夹切换按钮
-                with ui.row().classes("file-selector"):
-                    self.file_btn = ui.button("选择文件", on_click=self._switch_to_file_mode).classes("file-btn")
-                    self.folder_btn = ui.button("选择文件夹", on_click=self._switch_to_folder_mode).classes("file-btn")
+                with ui.row().classes("file-selector").style("justify-content: center; display: flex;"):
+                    self.file_btn = ui.button("选择文件", on_click=self._switch_to_file_mode).classes("file-btn").style("flex: 0 1 auto; min-width: 150px; max-width: 200px;")
+                    self.folder_btn = ui.button("选择文件夹", on_click=self._switch_to_folder_mode).classes("file-btn").style("flex: 0 1 auto; min-width: 150px; max-width: 200px;")
                 
                 # 文件上传组件
                 self.file_upload = ui.upload(
@@ -193,11 +200,11 @@ class ConverterUI:
                 ).classes("text-caption text-grey-6 mt-2").style("display: none")
                 
                 # 已选择文件显示
-                self.selected_files_label = ui.label("未选择任何文件").classes("selected-files empty")
+                self.selected_files_label = ui.label("未选择任何文件").classes("selected-files empty").style("text-align: center;")
             
             # 质量选择区域
-            with ui.column().classes("form-group"):
-                ui.label("转换质量").classes("text-weight-medium")
+            with ui.column().classes("form-group").style("text-align: center;"):
+                ui.label("转换质量").classes("text-weight-medium").style("text-align: center;")
                 self.quality_select = ui.select(
                     {
                         "320": "高质量 (320 kbps) - 推荐",
@@ -207,12 +214,12 @@ class ConverterUI:
                     },
                     value="320",
                     label="比特率"
-                ).classes("w-full")
-                ui.label("更高的比特率意味着更好的音质，但文件也会更大").classes("info-text")
+                ).classes("w-full").style("max-width: 500px; margin: 0 auto;")
+                ui.label("更高的比特率意味着更好的音质，但文件也会更大").classes("info-text").style("text-align: center;")
             
             # 输出目录选择区域
-            with ui.column().classes("form-group"):
-                ui.label("输出目录").classes("text-weight-medium")
+            with ui.column().classes("form-group").style("text-align: center;"):
+                ui.label("输出目录").classes("text-weight-medium").style("text-align: center;")
                 self.output_mode_select = ui.select(
                     {
                         "same": "保存到原文件同目录（默认）",
@@ -221,7 +228,7 @@ class ConverterUI:
                     value="same",
                     label="输出位置",
                     on_change=self._on_output_mode_change
-                ).classes("w-full")
+                ).classes("w-full").style("max-width: 500px; margin: 0 auto;")
                 
                 # 自定义目录选择区域
                 with ui.row().classes("w-full mt-2").style("display: none") as self.output_dir_row:
@@ -240,10 +247,11 @@ class ConverterUI:
                 self.output_dir_label = ui.label("MP3 文件将保存到原 FLAC 文件同目录").classes("text-caption text-grey-6 mt-1")
             
             # 转换按钮
-            self.convert_btn = ui.button(
-                "开始转换",
-                on_click=self._start_conversion
-            ).classes("convert-btn").props("color=primary")
+            with ui.column().style("text-align: center; width: 100%;"):
+                self.convert_btn = ui.button(
+                    "开始转换",
+                    on_click=self._start_conversion
+                ).classes("convert-btn").props("color=primary").style("max-width: 500px; margin: 0 auto;")
             
             # 进度条
             self.progress_bar = ui.linear_progress(show_value=False).classes("w-full mt-4").style("display: none")
@@ -353,19 +361,81 @@ class ConverterUI:
         """处理文件上传"""
         try:
             # NiceGUI 的 upload 组件会保存文件到临时目录
-            # e 是一个 UploadEvent 对象，包含上传的文件信息
-            uploaded_files = []
+            # e 是一个 UploadEventArguments 对象
+            # 根据 NiceGUI 版本，文件可能通过不同的属性访问
+            file_path = None
+            file_name = None
             
-            # NiceGUI 的 upload 组件会自动保存文件
-            # e.name 是保存后的文件路径
-            if e.name:
+            # 调试：打印事件对象的所有属性
+            logger.debug(f"上传事件对象类型: {type(e)}")
+            logger.debug(f"上传事件对象属性: {dir(e)}")
+            
+            # 尝试不同的属性访问方式
+            # 方法1: 直接访问 name 属性（某些版本）
+            if hasattr(e, 'name') and e.name:
                 file_path = Path(e.name)
+                file_name = file_path.name
+            # 方法2: 通过 file 属性访问（新版本）
+            elif hasattr(e, 'file'):
+                file_obj = e.file
+                # file 可能是 FileUpload 对象
+                if hasattr(file_obj, 'name'):
+                    file_name = file_obj.name
+                    # NiceGUI 会将文件保存到临时目录，路径可能在 file_obj 的其他属性中
+                    if hasattr(file_obj, 'file_path'):
+                        file_path = Path(file_obj.file_path)
+                    elif hasattr(file_obj, 'path'):
+                        file_path = Path(file_obj.path)
+                    else:
+                        # 尝试从 upload 组件获取保存路径
+                        # NiceGUI 通常将文件保存到 .nicegui/uploads/ 目录
+                        import tempfile
+                        upload_dir = Path(tempfile.gettempdir()) / ".nicegui" / "uploads"
+                        if upload_dir.exists():
+                            # 查找最近上传的文件
+                            files = sorted(upload_dir.glob("*"), key=lambda p: p.stat().st_mtime, reverse=True)
+                            if files:
+                                file_path = files[0]
+            # 方法3: 直接访问 file_path 属性
+            elif hasattr(e, 'file_path'):
+                file_path = Path(e.file_path)
+                file_name = file_path.name
+            # 方法4: 尝试从 upload 组件的内部状态获取
+            else:
+                # 如果以上方法都失败，尝试从临时目录查找
+                import tempfile
+                import time
+                upload_dir = Path(tempfile.gettempdir()) / ".nicegui" / "uploads"
+                if upload_dir.exists():
+                    # 查找最近1秒内修改的文件
+                    current_time = time.time()
+                    for f in upload_dir.iterdir():
+                        if f.is_file():
+                            mtime = f.stat().st_mtime
+                            if current_time - mtime < 2:  # 最近2秒内的文件
+                                file_path = f
+                                file_name = f.name
+                                break
+            
+            # 验证文件路径
+            if file_path and file_path.exists() and file_path.is_file():
+                # 检查是否是 FLAC 文件
                 if file_path.suffix.lower() == ".flac":
                     # 添加到已选文件列表（避免重复）
                     if file_path not in self.selected_files:
                         self.selected_files.append(file_path)
+                        logger.info(f"成功添加文件: {file_path}")
+                else:
+                    logger.warning(f"跳过非 FLAC 文件: {file_path.name}")
+            else:
+                # 如果无法获取文件路径，记录详细信息以便调试
+                logger.warning(f"无法获取有效的文件路径")
+                logger.warning(f"事件对象: {e}")
+                logger.warning(f"尝试的路径: {file_path}")
+                if file_name:
+                    logger.warning(f"文件名: {file_name}")
             
-            uploaded_files = self.selected_files
+            # 更新显示
             if self.selected_files:
                 file_names = ", ".join([f.name for f in self.selected_files[:3]])
                 if len(self.selected_files) > 3:
@@ -376,7 +446,7 @@ class ConverterUI:
                 self.selected_files_label.text = "未选择任何 FLAC 文件"
                 self.selected_files_label.classes("empty", remove="")
         except Exception as ex:
-            logger.error(f"处理文件上传时出错: {ex}")
+            logger.error(f"处理文件上传时出错: {ex}", exc_info=True)
             ui.notify(f"文件上传处理失败: {str(ex)}", type="negative")
     
     async def _start_conversion(self):
