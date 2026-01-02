@@ -295,35 +295,56 @@ class ConverterUI:
     def _handle_file_upload(self, e):
         """处理文件上传"""
         try:
-            # NiceGUI upload 组件的事件参数
-            # e 包含上传文件的信息
+            # 打印所有可用属性，用于调试
+            print(f"\n[DEBUG] ===== 文件上传事件 =====")
+            print(f"[DEBUG] 事件对象类型: {type(e)}")
+            print(f"[DEBUG] 事件对象所有属性: {[attr for attr in dir(e) if not attr.startswith('_')]}")
             
-            # 打印调试信息
-            print(f"[DEBUG] 上传事件类型: {type(e)}")
-            print(f"[DEBUG] 上传事件属性: {dir(e)}")
+            # 尝试打印具体的属性值
+            for attr in ['name', 'content', 'type', 'sender']:
+                if hasattr(e, attr):
+                    val = getattr(e, attr)
+                    print(f"[DEBUG] {attr} = {val} (type: {type(val)})")
             
-            # 尝试获取文件内容和名称
-            file_content = None
+            # 根据 NiceGUI 文档，事件参数应该直接是上传的信息
+            # 但可能在不同版本中有所不同，让我们尝试多种方式
             file_name = None
+            file_content = None
             
-            # 检查事件对象的属性
-            if hasattr(e, 'content'):
-                file_content = e.content
-                print(f"[DEBUG] 找到 content 属性")
+            # 方式1: 直接访问属性（标准方式）
+            try:
+                file_name = e.name if hasattr(e, 'name') else None
+                file_content = e.content if hasattr(e, 'content') else None
+            except Exception as ex1:
+                print(f"[DEBUG] 方式1失败: {ex1}")
             
-            if hasattr(e, 'name'):
-                file_name = e.name
-                print(f"[DEBUG] 找到 name 属性: {file_name}")
+            # 方式2: 如果 e 本身是 sender，尝试从 sender 获取
+            if not file_name and hasattr(e, 'sender'):
+                try:
+                    sender = e.sender
+                    print(f"[DEBUG] sender 类型: {type(sender)}")
+                    print(f"[DEBUG] sender 属性: {[attr for attr in dir(sender) if not attr.startswith('_')]}")
+                    # 检查 sender 的 _props
+                    if hasattr(sender, '_props'):
+                        print(f"[DEBUG] sender._props = {sender._props}")
+                except Exception as ex2:
+                    print(f"[DEBUG] 方式2失败: {ex2}")
             
+            # 如果仍然无法获取文件名，提示用户
             if not file_name:
-                print(f"[ERROR] 无法获取文件名")
-                ui.notify("无法获取文件名", type="negative")
+                error_msg = "无法获取文件名。请查看终端输出的调试信息。"
+                print(f"[ERROR] {error_msg}")
+                print(f"[ERROR] 事件对象完整信息: {e}")
+                ui.notify(error_msg, type="negative")
                 return
+            
+            print(f"[INFO] 获取到文件名: {file_name}")
             
             # 检查文件扩展名
             if not file_name.lower().endswith('.flac'):
-                print(f"[WARNING] 跳过非 FLAC 文件: {file_name}")
-                ui.notify(f"跳过非 FLAC 文件: {file_name}", type="warning")
+                msg = f"跳过非 FLAC 文件: {file_name}"
+                print(f"[WARNING] {msg}")
+                ui.notify(msg, type="warning")
                 return
             
             # 保存文件到临时目录
@@ -335,12 +356,16 @@ class ConverterUI:
             
             # 写入文件内容
             if file_content:
+                print(f"[INFO] 开始保存文件: {temp_file}")
                 with open(temp_file, 'wb') as f:
                     # content 可能是 bytes 或 file-like 对象
                     if hasattr(file_content, 'read'):
-                        f.write(file_content.read())
+                        data = file_content.read()
+                        f.write(data)
+                        print(f"[INFO] 写入 {len(data)} 字节")
                     else:
                         f.write(file_content)
+                        print(f"[INFO] 写入文件内容")
                 
                 print(f"[SUCCESS] 文件已保存: {temp_file}")
                 
@@ -348,9 +373,12 @@ class ConverterUI:
                 if temp_file not in self.selected_files:
                     self.selected_files.append(temp_file)
                     print(f"[INFO] 已添加到选择列表，当前共 {len(self.selected_files)} 个文件")
+                else:
+                    print(f"[INFO] 文件已在列表中，跳过")
             else:
-                print(f"[ERROR] 无法获取文件内容")
-                ui.notify("无法读取文件内容", type="negative")
+                error_msg = "无法获取文件内容"
+                print(f"[ERROR] {error_msg}")
+                ui.notify(error_msg, type="negative")
                 return
             
             # 更新显示
@@ -358,19 +386,26 @@ class ConverterUI:
                 file_names = ", ".join([f.name for f in self.selected_files[:3]])
                 if len(self.selected_files) > 3:
                     file_names += f" 等共 {len(self.selected_files)} 个文件"
-                self.selected_files_label.text = f"已选择 {len(self.selected_files)} 个文件: {file_names}"
+                display_text = f"已选择 {len(self.selected_files)} 个文件: {file_names}"
+                self.selected_files_label.text = display_text
                 self.selected_files_label.classes(remove="empty")
-                print(f"[UI] 更新显示: {self.selected_files_label.text}")
+                print(f"[UI] 更新显示: {display_text}")
+                ui.notify(f"已添加文件: {file_name}", type="positive")
             else:
                 self.selected_files_label.text = "未选择任何 FLAC 文件"
                 self.selected_files_label.classes("empty", remove="")
+            
+            print(f"[DEBUG] ===== 文件上传完成 =====\n")
         
         except Exception as ex:
-            print(f"[ERROR] 处理文件上传时出错: {ex}")
+            print(f"\n[ERROR] ===== 处理文件上传时出错 =====")
+            print(f"[ERROR] 错误类型: {type(ex)}")
+            print(f"[ERROR] 错误信息: {ex}")
             import traceback
             traceback.print_exc()
             logger.error(f"处理文件上传时出错: {ex}", exc_info=True)
             ui.notify(f"文件上传处理失败: {str(ex)}", type="negative")
+            print(f"[ERROR] ===== 错误处理完成 =====\n")
     
     async def _start_conversion(self):
         """开始转换"""
