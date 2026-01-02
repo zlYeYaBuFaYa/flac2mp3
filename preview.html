@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FLAC to MP3 转换器 - 效果预览</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 30px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #333;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        .file-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .file-btn {
+            flex: 1;
+            padding: 14px 20px;
+            background: #f5f5f5;
+            border: 2px dashed #ddd;
+            border-radius: 12px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .file-btn:hover {
+            background: #e8e8e8;
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .file-btn.active {
+            background: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .file-input {
+            width: 100%;
+            padding: 14px 20px;
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 14px;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-input:hover {
+            border-color: #667eea;
+            background: #f0f0ff;
+        }
+
+        .file-input::file-selector-button {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-right: 12px;
+            transition: background 0.3s ease;
+        }
+
+        .file-input::file-selector-button:hover {
+            background: #5568d3;
+        }
+
+        .quality-select {
+            width: 100%;
+            padding: 14px 20px;
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 14px;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            padding-right: 45px;
+        }
+
+        .quality-select:hover {
+            border-color: #667eea;
+            background-color: #f0f0ff;
+        }
+
+        .quality-select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .convert-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            margin-top: 10px;
+        }
+
+        .convert-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .convert-btn:active {
+            transform: translateY(0);
+        }
+
+        .convert-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .selected-files {
+            margin-top: 15px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #666;
+            min-height: 40px;
+            display: flex;
+            align-items: center;
+        }
+
+        .selected-files.empty {
+            color: #999;
+            font-style: italic;
+        }
+
+        .info-text {
+            font-size: 12px;
+            color: #999;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎵 FLAC to MP3 转换器</h1>
+            <p>轻松将 FLAC 音频文件转换为 MP3 格式</p>
+        </div>
+
+        <form id="converterForm">
+            <div class="form-group">
+                <label>选择文件或文件夹</label>
+                <div class="file-selector">
+                    <div class="file-btn active" id="fileBtn">选择文件</div>
+                    <div class="file-btn" id="folderBtn">选择文件夹</div>
+                </div>
+                <div class="file-input-wrapper">
+                    <input type="file" id="fileInput" class="file-input" accept=".flac" multiple>
+                    <input type="file" id="folderInput" class="file-input" webkitdirectory directory style="display: none;">
+                </div>
+                <div class="selected-files empty" id="selectedFiles">
+                    未选择任何文件
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>转换质量</label>
+                <select id="qualitySelect" class="quality-select">
+                    <option value="320">高质量 (320 kbps) - 推荐</option>
+                    <option value="256">标准质量 (256 kbps)</option>
+                    <option value="192">中等质量 (192 kbps)</option>
+                    <option value="128">普通质量 (128 kbps)</option>
+                </select>
+                <div class="info-text">更高的比特率意味着更好的音质，但文件也会更大</div>
+            </div>
+
+            <button type="button" class="convert-btn" id="convertBtn">
+                开始转换
+            </button>
+        </form>
+    </div>
+
+    <script>
+        const fileBtn = document.getElementById('fileBtn');
+        const folderBtn = document.getElementById('folderBtn');
+        const fileInput = document.getElementById('fileInput');
+        const folderInput = document.getElementById('folderInput');
+        const selectedFiles = document.getElementById('selectedFiles');
+        const convertBtn = document.getElementById('convertBtn');
+
+        // 切换文件/文件夹选择模式
+        fileBtn.addEventListener('click', () => {
+            fileBtn.classList.add('active');
+            folderBtn.classList.remove('active');
+            fileInput.style.display = 'block';
+            folderInput.style.display = 'none';
+            selectedFiles.textContent = '未选择任何文件';
+            selectedFiles.classList.add('empty');
+        });
+
+        folderBtn.addEventListener('click', () => {
+            folderBtn.classList.add('active');
+            fileBtn.classList.remove('active');
+            fileInput.style.display = 'none';
+            folderInput.style.display = 'block';
+            selectedFiles.textContent = '未选择任何文件夹';
+            selectedFiles.classList.add('empty');
+        });
+
+        // 文件选择处理
+        fileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files.length > 0) {
+                const fileNames = Array.from(files).map(f => f.name).join(', ');
+                selectedFiles.textContent = `已选择 ${files.length} 个文件: ${fileNames}`;
+                selectedFiles.classList.remove('empty');
+            } else {
+                selectedFiles.textContent = '未选择任何文件';
+                selectedFiles.classList.add('empty');
+            }
+        });
+
+        folderInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files.length > 0) {
+                const folderName = files[0].webkitRelativePath.split('/')[0];
+                selectedFiles.textContent = `已选择文件夹: ${folderName} (包含 ${files.length} 个文件)`;
+                selectedFiles.classList.remove('empty');
+            } else {
+                selectedFiles.textContent = '未选择任何文件夹';
+                selectedFiles.classList.add('empty');
+            }
+        });
+
+        // 转换按钮点击
+        convertBtn.addEventListener('click', () => {
+            const quality = document.getElementById('qualitySelect').value;
+            const isFileMode = fileBtn.classList.contains('active');
+            const files = isFileMode ? fileInput.files : folderInput.files;
+            
+            if (files.length === 0) {
+                alert('请先选择要转换的文件或文件夹！');
+                return;
+            }
+
+            convertBtn.disabled = true;
+            convertBtn.textContent = '转换中...';
+            
+            // 模拟转换过程
+            setTimeout(() => {
+                alert(`转换完成！\n质量: ${quality} kbps\n文件数: ${files.length}`);
+                convertBtn.disabled = false;
+                convertBtn.textContent = '开始转换';
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

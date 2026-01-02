@@ -1,0 +1,519 @@
+"""
+NiceGUI 用户界面模块
+实现 FLAC to MP3 转换器的图形界面
+"""
+from nicegui import ui
+from pathlib import Path
+from typing import List, Optional
+import asyncio
+from converter import AudioConverter
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class ConverterUI:
+    """转换器用户界面类"""
+    
+    def __init__(self):
+        """初始化界面"""
+        self.converter = None
+        self.selected_files: List[Path] = []
+        self.is_file_mode = True
+        self.is_converting = False
+        self.output_dir: Optional[Path] = None
+        self.use_custom_output = False
+        
+        # UI 组件
+        self.file_btn = None
+        self.folder_btn = None
+        self.file_upload = None
+        self.folder_upload = None
+        self.selected_files_label = None
+        self.quality_select = None
+        self.output_mode_select = None
+        self.output_dir_input = None
+        self.output_dir_btn = None
+        self.output_dir_label = None
+        self.convert_btn = None
+        self.progress_bar = None
+        self.status_label = None
+        self.log_area = None
+        
+        self._init_converter()
+        self._setup_ui()
+    
+    def _init_converter(self):
+        """初始化音频转换器"""
+        try:
+            self.converter = AudioConverter()
+        except RuntimeError as e:
+            logger.error(f"初始化转换器失败: {e}")
+            ui.notify(f"错误: {e}", type="negative", position="top")
+    
+    def _setup_ui(self):
+        """设置用户界面"""
+        # 设置页面样式
+        ui.add_head_html("""
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+            }
+            .container {
+                background: white;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                padding: 40px;
+                max-width: 600px;
+                margin: 20px auto;
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 40px;
+            }
+            .header h1 {
+                color: #333;
+                font-size: 28px;
+                font-weight: 600;
+                margin-bottom: 8px;
+            }
+            .header p {
+                color: #666;
+                font-size: 14px;
+            }
+            .form-group {
+                margin-bottom: 30px;
+            }
+            .form-group label {
+                display: block;
+                color: #333;
+                font-size: 14px;
+                font-weight: 500;
+                margin-bottom: 10px;
+            }
+            .file-selector {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+            .file-btn {
+                flex: 1;
+                padding: 14px 20px;
+                background: #f5f5f5;
+                border: 2px dashed #ddd;
+                border-radius: 12px;
+                text-align: center;
+                font-size: 14px;
+                color: #666;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+            .file-btn:hover {
+                background: #e8e8e8;
+                border-color: #667eea;
+                color: #667eea;
+            }
+            .file-btn.active {
+                background: #667eea;
+                border-color: #667eea;
+                color: white;
+            }
+            .selected-files {
+                margin-top: 15px;
+                padding: 12px;
+                background: #f8f9fa;
+                border-radius: 8px;
+                font-size: 13px;
+                color: #666;
+                min-height: 40px;
+            }
+            .selected-files.empty {
+                color: #999;
+                font-style: italic;
+            }
+            .info-text {
+                font-size: 12px;
+                color: #999;
+                margin-top: 8px;
+            }
+            .convert-btn {
+                width: 100%;
+                padding: 16px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                border-radius: 12px;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+                margin-top: 10px;
+            }
+            .convert-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+            }
+            .convert-btn:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+                transform: none;
+                box-shadow: none;
+            }
+        </style>
+        """)
+        
+        with ui.card().classes("container"):
+            # 标题区域
+            with ui.column().classes("header"):
+                ui.label("🎵 FLAC to MP3 转换器").classes("text-h4 text-weight-bold")
+                ui.label("轻松将 FLAC 音频文件转换为 MP3 格式").classes("text-body2 text-grey-7")
+            
+            # 文件选择区域
+            with ui.column().classes("form-group"):
+                ui.label("选择文件或文件夹").classes("text-weight-medium")
+                
+                # 文件/文件夹切换按钮
+                with ui.row().classes("file-selector"):
+                    self.file_btn = ui.button("选择文件", on_click=self._switch_to_file_mode).classes("file-btn")
+                    self.folder_btn = ui.button("选择文件夹", on_click=self._switch_to_folder_mode).classes("file-btn")
+                
+                # 文件上传组件
+                self.file_upload = ui.upload(
+                    on_upload=self._handle_file_upload,
+                    auto_upload=True,
+                    multiple=True
+                ).props("accept=.flac").classes("w-full")
+                
+                # 文件夹上传提示
+                self.folder_hint = ui.label(
+                    "提示：在文件选择模式下，可以按住 Ctrl/Cmd 键选择多个文件，或直接选择文件夹中的所有 FLAC 文件"
+                ).classes("text-caption text-grey-6 mt-2").style("display: none")
+                
+                # 已选择文件显示
+                self.selected_files_label = ui.label("未选择任何文件").classes("selected-files empty")
+            
+            # 质量选择区域
+            with ui.column().classes("form-group"):
+                ui.label("转换质量").classes("text-weight-medium")
+                self.quality_select = ui.select(
+                    {
+                        "320": "高质量 (320 kbps) - 推荐",
+                        "256": "标准质量 (256 kbps)",
+                        "192": "中等质量 (192 kbps)",
+                        "128": "普通质量 (128 kbps)"
+                    },
+                    value="320",
+                    label="比特率"
+                ).classes("w-full")
+                ui.label("更高的比特率意味着更好的音质，但文件也会更大").classes("info-text")
+            
+            # 输出目录选择区域
+            with ui.column().classes("form-group"):
+                ui.label("输出目录").classes("text-weight-medium")
+                self.output_mode_select = ui.select(
+                    {
+                        "same": "保存到原文件同目录（默认）",
+                        "custom": "选择自定义目录"
+                    },
+                    value="same",
+                    label="输出位置",
+                    on_change=self._on_output_mode_change
+                ).classes("w-full")
+                
+                # 自定义目录选择区域
+                with ui.row().classes("w-full mt-2").style("display: none") as self.output_dir_row:
+                    self.output_dir_input = ui.input(
+                        label="输出目录路径",
+                        placeholder="请输入输出目录的完整路径（例如: /Users/username/Music/MP3）",
+                        value="",
+                        on_change=self._validate_output_dir
+                    ).classes("flex-1")
+                    self.output_dir_btn = ui.button(
+                        "验证",
+                        on_click=self._select_output_dir,
+                        icon="check"
+                    ).props("outline")
+                
+                self.output_dir_label = ui.label("MP3 文件将保存到原 FLAC 文件同目录").classes("text-caption text-grey-6 mt-1")
+            
+            # 转换按钮
+            self.convert_btn = ui.button(
+                "开始转换",
+                on_click=self._start_conversion
+            ).classes("convert-btn").props("color=primary")
+            
+            # 进度条
+            self.progress_bar = ui.linear_progress(show_value=False).classes("w-full mt-4").style("display: none")
+            
+            # 状态标签
+            self.status_label = ui.label("").classes("text-center mt-2")
+            
+            # 日志区域
+            with ui.expansion("转换日志", icon="description").classes("w-full mt-4"):
+                self.log_area = ui.log().classes("w-full h-40")
+        
+        # 初始化文件模式
+        self._switch_to_file_mode()
+    
+    def _switch_to_file_mode(self):
+        """切换到文件选择模式"""
+        self.is_file_mode = True
+        self.file_btn.classes("active", remove="")
+        self.folder_btn.classes(remove="active")
+        self.file_upload.style("display: block")
+        self.folder_hint.style("display: none")
+        self.selected_files = []
+        self.selected_files_label.text = "未选择任何文件"
+        self.selected_files_label.classes("empty", remove="")
+    
+    def _switch_to_folder_mode(self):
+        """切换到文件夹选择模式"""
+        self.is_file_mode = False
+        self.folder_btn.classes("active", remove="")
+        self.file_btn.classes(remove="active")
+        self.folder_hint.style("display: block")
+        self.file_upload.style("display: block")  # 仍然使用文件上传，但提示选择文件夹中的所有文件
+        self.selected_files = []
+        self.selected_files_label.text = "未选择任何文件夹"
+        self.selected_files_label.classes("empty", remove="")
+        ui.notify("提示：请选择文件夹中的所有 FLAC 文件", type="info")
+    
+    def _on_output_mode_change(self, e):
+        """处理输出模式切换"""
+        if e.value == "custom":
+            self.use_custom_output = True
+            self.output_dir_row.style("display: flex")
+            self.output_dir_label.text = "请选择或输入输出目录路径"
+        else:
+            self.use_custom_output = False
+            self.output_dir = None
+            self.output_dir_row.style("display: none")
+            self.output_dir_label.text = "MP3 文件将保存到原 FLAC 文件同目录"
+    
+    def _validate_output_dir(self, e=None):
+        """验证输出目录路径"""
+        if not self.output_dir_input.value:
+            self.output_dir_label.text = "请输入输出目录路径"
+            self.output_dir_label.classes(remove="text-green text-red")
+            self.output_dir = None
+            return
+        
+        try:
+            path = Path(self.output_dir_input.value.strip())
+            if path.exists() and path.is_dir():
+                # 验证目录是否可写
+                test_file = path / ".test_write"
+                try:
+                    test_file.touch()
+                    test_file.unlink()
+                    self.output_dir = path
+                    self.output_dir_label.text = f"✓ 输出目录有效: {path}"
+                    self.output_dir_label.classes(remove="text-red")
+                    self.output_dir_label.classes("text-green")
+                except Exception:
+                    self.output_dir_label.text = f"✗ 目录不可写: {path}"
+                    self.output_dir_label.classes(remove="text-green")
+                    self.output_dir_label.classes("text-red")
+                    self.output_dir = None
+            elif not path.exists():
+                # 检查父目录是否存在，如果存在则可以创建
+                parent = path.parent
+                if parent.exists() and parent.is_dir():
+                    self.output_dir_label.text = f"目录不存在，将自动创建: {path}"
+                    self.output_dir_label.classes(remove="text-green text-red")
+                    self.output_dir = path  # 允许创建新目录
+                else:
+                    self.output_dir_label.text = f"✗ 路径无效，父目录不存在: {path}"
+                    self.output_dir_label.classes(remove="text-green")
+                    self.output_dir_label.classes("text-red")
+                    self.output_dir = None
+            else:
+                self.output_dir_label.text = f"✗ 路径不是目录: {path}"
+                self.output_dir_label.classes(remove="text-green")
+                self.output_dir_label.classes("text-red")
+                self.output_dir = None
+        except Exception as ex:
+            self.output_dir_label.text = f"✗ 路径格式错误: {str(ex)}"
+            self.output_dir_label.classes(remove="text-green")
+            self.output_dir_label.classes("text-red")
+            self.output_dir = None
+    
+    async def _select_output_dir(self):
+        """验证并设置输出目录"""
+        self._validate_output_dir()
+        if self.output_dir:
+            ui.notify(f"输出目录已设置: {self.output_dir}", type="positive")
+        else:
+            ui.notify("请检查输出目录路径是否正确", type="warning")
+    
+    def _handle_file_upload(self, e):
+        """处理文件上传"""
+        try:
+            # NiceGUI 的 upload 组件会保存文件到临时目录
+            # e 是一个 UploadEvent 对象，包含上传的文件信息
+            uploaded_files = []
+            
+            # NiceGUI 的 upload 组件会自动保存文件
+            # e.name 是保存后的文件路径
+            if e.name:
+                file_path = Path(e.name)
+                if file_path.suffix.lower() == ".flac":
+                    # 添加到已选文件列表（避免重复）
+                    if file_path not in self.selected_files:
+                        self.selected_files.append(file_path)
+            
+            uploaded_files = self.selected_files
+            if self.selected_files:
+                file_names = ", ".join([f.name for f in self.selected_files[:3]])
+                if len(self.selected_files) > 3:
+                    file_names += f" 等 {len(self.selected_files)} 个文件"
+                self.selected_files_label.text = f"已选择 {len(self.selected_files)} 个文件: {file_names}"
+                self.selected_files_label.classes(remove="empty")
+            else:
+                self.selected_files_label.text = "未选择任何 FLAC 文件"
+                self.selected_files_label.classes("empty", remove="")
+        except Exception as ex:
+            logger.error(f"处理文件上传时出错: {ex}")
+            ui.notify(f"文件上传处理失败: {str(ex)}", type="negative")
+    
+    async def _start_conversion(self):
+        """开始转换"""
+        if not self.converter:
+            ui.notify("转换器未初始化", type="negative")
+            return
+        
+        if not self.selected_files:
+            ui.notify("请先选择要转换的文件或文件夹", type="warning")
+            return
+        
+        if self.is_converting:
+            return
+        
+        # 获取比特率
+        bitrate = int(self.quality_select.value)
+        
+        # 确定输出目录
+        output_dir = None
+        if self.use_custom_output:
+            # 验证自定义输出目录
+            if not self.output_dir_input.value:
+                ui.notify("请先设置输出目录", type="warning")
+                return
+            
+            try:
+                output_dir = Path(self.output_dir_input.value)
+                if not output_dir.exists():
+                    # 尝试创建目录
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                elif not output_dir.is_dir():
+                    ui.notify(f"输出路径不是目录: {output_dir}", type="negative")
+                    return
+                
+                # 验证目录是否可写
+                test_file = output_dir / ".test_write"
+                try:
+                    test_file.touch()
+                    test_file.unlink()
+                except Exception:
+                    ui.notify(f"输出目录不可写: {output_dir}", type="negative")
+                    return
+                
+                self.output_dir = output_dir
+                self.log_area.push(f"输出目录: {output_dir}")
+            except Exception as ex:
+                ui.notify(f"输出目录设置失败: {str(ex)}", type="negative")
+                return
+        
+        # 更新 UI 状态
+        self.is_converting = True
+        self.convert_btn.disable()
+        self.convert_btn.text = "转换中..."
+        self.progress_bar.style("display: block")
+        self.progress_bar.value = 0
+        self.status_label.text = "准备开始转换..."
+        self.log_area.clear()
+        
+        try:
+            # 收集所有需要转换的文件
+            # 上传的文件已经是 Path 对象，直接使用
+            all_flac_files = []
+            for file_path in self.selected_files:
+                path = Path(file_path)
+                # 确保文件存在且是 FLAC 文件
+                if path.exists() and path.is_file() and path.suffix.lower() == ".flac":
+                    all_flac_files.append(path)
+            
+            if not all_flac_files:
+                ui.notify("未找到任何 FLAC 文件", type="warning")
+                return
+            
+            total = len(all_flac_files)
+            output_info = f"输出到: {output_dir}" if output_dir else "输出到原文件同目录"
+            self.log_area.push(f"找到 {total} 个 FLAC 文件，开始转换...")
+            self.log_area.push(output_info)
+            
+            # 转换文件
+            converted_count = 0
+            failed_count = 0
+            
+            for idx, flac_file in enumerate(all_flac_files, 1):
+                try:
+                    # 更新进度
+                    progress = idx / total
+                    self.progress_bar.value = progress
+                    self.status_label.text = f"正在转换: {flac_file.name} ({idx}/{total})"
+                    self.log_area.push(f"[{idx}/{total}] 转换: {flac_file.name}")
+                    
+                    # 执行转换
+                    output_file = self.converter.convert_file(
+                        flac_file,
+                        output_dir=output_dir,  # 使用选择的输出目录
+                        bitrate=bitrate
+                    )
+                    
+                    converted_count += 1
+                    self.log_area.push(f"✓ 成功: {output_file.name}")
+                    
+                    # 让 UI 更新
+                    await asyncio.sleep(0.01)
+                    
+                except Exception as e:
+                    failed_count += 1
+                    error_msg = f"✗ 失败: {flac_file.name} - {str(e)}"
+                    self.log_area.push(error_msg)
+                    logger.error(error_msg)
+            
+            # 转换完成
+            self.progress_bar.value = 1.0
+            self.status_label.text = f"转换完成！成功: {converted_count}, 失败: {failed_count}"
+            
+            if failed_count == 0:
+                ui.notify(f"转换完成！共转换 {converted_count} 个文件", type="positive")
+            else:
+                ui.notify(f"转换完成，但有 {failed_count} 个文件失败", type="warning")
+            
+            self.log_area.push(f"\n转换完成！成功: {converted_count}, 失败: {failed_count}")
+            
+        except Exception as e:
+            error_msg = f"转换过程出错: {str(e)}"
+            self.log_area.push(error_msg)
+            self.status_label.text = "转换失败"
+            ui.notify(error_msg, type="negative")
+            logger.error(error_msg)
+        
+        finally:
+            # 恢复 UI 状态
+            self.is_converting = False
+            self.convert_btn.enable()
+            self.convert_btn.text = "开始转换"
+            await asyncio.sleep(2)
+            self.progress_bar.style("display: none")
+
+
+def create_app():
+    """创建并返回 NiceGUI 应用"""
+    app = ConverterUI()
+    return app
