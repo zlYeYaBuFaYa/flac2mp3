@@ -18,7 +18,8 @@ class ConverterUI:
     def __init__(self):
         """初始化界面"""
         self.converter = None
-        self.selected_files: List[Path] = []
+        self.selected_files: List[Path] = []  # 存储文件路径
+        self.selected_file_names: dict = {}  # 存储原始文件名映射 {path: original_name}
         self.is_file_mode = True
         self.is_converting = False
         
@@ -248,6 +249,7 @@ class ConverterUI:
         self.file_upload.style("display: block")
         self.folder_hint.style("display: none")
         self.selected_files = []
+        self.selected_file_names = {}
         self.selected_files_label.text = "未选择任何文件"
         self.selected_files_label.classes("empty", remove="")
     
@@ -259,6 +261,7 @@ class ConverterUI:
         self.folder_hint.style("display: block")
         self.file_upload.style("display: block")  # 仍然使用文件上传，但提示选择文件夹中的所有文件
         self.selected_files = []
+        self.selected_file_names = {}
         self.selected_files_label.text = "未选择任何文件夹"
         self.selected_files_label.classes("empty", remove="")
         ui.notify("提示：请选择文件夹中的所有 FLAC 文件", type="info")
@@ -338,7 +341,10 @@ class ConverterUI:
             # 直接使用 NiceGUI 保存的临时文件路径
             if file_path not in self.selected_files:
                 self.selected_files.append(file_path)
+                # 保存原始文件名映射
+                self.selected_file_names[file_path] = file_name
                 print(f"[INFO] 已添加到选择列表，当前共 {len(self.selected_files)} 个文件")
+                print(f"[INFO] 原始文件名: {file_name}")
             else:
                 print(f"[INFO] 文件已在列表中，跳过")
             
@@ -395,16 +401,39 @@ class ConverterUI:
         
         try:
             # 收集所有需要转换的文件
-            # 上传的文件已经是 Path 对象，直接使用
+            # self.selected_files 中存储的是 Path 对象
             all_flac_files = []
-            for file_path in self.selected_files:
-                path = Path(file_path)
-                # 确保文件存在且是 FLAC 文件
-                if path.exists() and path.is_file() and path.suffix.lower() == ".flac":
-                    all_flac_files.append(path)
+            
+            print(f"\n[DEBUG] ===== 开始转换 =====")
+            print(f"[DEBUG] 已选择的文件数: {len(self.selected_files)}")
+            
+            for idx, file_path in enumerate(self.selected_files):
+                # 获取原始文件名
+                original_name = self.selected_file_names.get(file_path, file_path.name)
+                
+                print(f"[DEBUG] 检查文件 {idx + 1}:")
+                print(f"[DEBUG]   临时路径: {file_path}")
+                print(f"[DEBUG]   原始文件名: {original_name}")
+                print(f"[DEBUG]   文件存在: {file_path.exists()}")
+                print(f"[DEBUG]   是文件: {file_path.is_file()}")
+                
+                # 确保文件存在且是文件
+                if file_path.exists() and file_path.is_file():
+                    # 使用原始文件名判断是否为 FLAC 文件
+                    if original_name.lower().endswith('.flac'):
+                        all_flac_files.append(file_path)
+                        print(f"[INFO] ✓ 添加文件: {original_name}")
+                    else:
+                        print(f"[WARNING] ✗ 跳过非 FLAC 文件: {original_name}")
+                else:
+                    print(f"[ERROR] ✗ 文件不存在或不是文件: {file_path}")
+            
+            print(f"[INFO] 收集到 {len(all_flac_files)} 个有效的 FLAC 文件")
             
             if not all_flac_files:
-                ui.notify("未找到任何 FLAC 文件", type="warning")
+                error_msg = "未找到任何 FLAC 文件。请检查上传的文件是否仍然存在。"
+                print(f"[ERROR] {error_msg}")
+                ui.notify(error_msg, type="warning")
                 return
             
             # 确定 mp3 输出目录
