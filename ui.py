@@ -295,50 +295,28 @@ class ConverterUI:
     def _handle_file_upload(self, e):
         """处理文件上传"""
         try:
-            # 打印所有可用属性，用于调试
+            # NiceGUI 的 upload 事件结构：
+            # e.file.name - 文件名
+            # e.file._path - NiceGUI 已保存的临时文件路径
+            # e.file.content_type - 文件 MIME 类型
+            
             print(f"\n[DEBUG] ===== 文件上传事件 =====")
-            print(f"[DEBUG] 事件对象类型: {type(e)}")
-            print(f"[DEBUG] 事件对象所有属性: {[attr for attr in dir(e) if not attr.startswith('_')]}")
             
-            # 尝试打印具体的属性值
-            for attr in ['name', 'content', 'type', 'sender']:
-                if hasattr(e, attr):
-                    val = getattr(e, attr)
-                    print(f"[DEBUG] {attr} = {val} (type: {type(val)})")
-            
-            # 根据 NiceGUI 文档，事件参数应该直接是上传的信息
-            # 但可能在不同版本中有所不同，让我们尝试多种方式
-            file_name = None
-            file_content = None
-            
-            # 方式1: 直接访问属性（标准方式）
-            try:
-                file_name = e.name if hasattr(e, 'name') else None
-                file_content = e.content if hasattr(e, 'content') else None
-            except Exception as ex1:
-                print(f"[DEBUG] 方式1失败: {ex1}")
-            
-            # 方式2: 如果 e 本身是 sender，尝试从 sender 获取
-            if not file_name and hasattr(e, 'sender'):
-                try:
-                    sender = e.sender
-                    print(f"[DEBUG] sender 类型: {type(sender)}")
-                    print(f"[DEBUG] sender 属性: {[attr for attr in dir(sender) if not attr.startswith('_')]}")
-                    # 检查 sender 的 _props
-                    if hasattr(sender, '_props'):
-                        print(f"[DEBUG] sender._props = {sender._props}")
-                except Exception as ex2:
-                    print(f"[DEBUG] 方式2失败: {ex2}")
-            
-            # 如果仍然无法获取文件名，提示用户
-            if not file_name:
-                error_msg = "无法获取文件名。请查看终端输出的调试信息。"
+            # 从事件对象获取文件信息
+            if not hasattr(e, 'file'):
+                error_msg = "事件对象中没有 file 属性"
                 print(f"[ERROR] {error_msg}")
-                print(f"[ERROR] 事件对象完整信息: {e}")
+                print(f"[ERROR] 事件对象: {e}")
                 ui.notify(error_msg, type="negative")
                 return
             
-            print(f"[INFO] 获取到文件名: {file_name}")
+            file_obj = e.file
+            file_name = file_obj.name
+            file_path = Path(file_obj._path)  # NiceGUI 已经保存好的临时文件路径
+            
+            print(f"[INFO] 文件名: {file_name}")
+            print(f"[INFO] 文件类型: {file_obj.content_type}")
+            print(f"[INFO] 临时路径: {file_path}")
             
             # 检查文件扩展名
             if not file_name.lower().endswith('.flac'):
@@ -347,39 +325,22 @@ class ConverterUI:
                 ui.notify(msg, type="warning")
                 return
             
-            # 保存文件到临时目录
-            import tempfile
-            temp_dir = Path(tempfile.gettempdir()) / "flac2mp3_uploads"
-            temp_dir.mkdir(exist_ok=True)
-            
-            temp_file = temp_dir / file_name
-            
-            # 写入文件内容
-            if file_content:
-                print(f"[INFO] 开始保存文件: {temp_file}")
-                with open(temp_file, 'wb') as f:
-                    # content 可能是 bytes 或 file-like 对象
-                    if hasattr(file_content, 'read'):
-                        data = file_content.read()
-                        f.write(data)
-                        print(f"[INFO] 写入 {len(data)} 字节")
-                    else:
-                        f.write(file_content)
-                        print(f"[INFO] 写入文件内容")
-                
-                print(f"[SUCCESS] 文件已保存: {temp_file}")
-                
-                # 添加到已选文件列表
-                if temp_file not in self.selected_files:
-                    self.selected_files.append(temp_file)
-                    print(f"[INFO] 已添加到选择列表，当前共 {len(self.selected_files)} 个文件")
-                else:
-                    print(f"[INFO] 文件已在列表中，跳过")
-            else:
-                error_msg = "无法获取文件内容"
+            # 验证文件存在
+            if not file_path.exists():
+                error_msg = f"临时文件不存在: {file_path}"
                 print(f"[ERROR] {error_msg}")
                 ui.notify(error_msg, type="negative")
                 return
+            
+            print(f"[SUCCESS] 文件已上传: {file_name} ({file_path.stat().st_size} 字节)")
+            
+            # 添加到已选文件列表
+            # 直接使用 NiceGUI 保存的临时文件路径
+            if file_path not in self.selected_files:
+                self.selected_files.append(file_path)
+                print(f"[INFO] 已添加到选择列表，当前共 {len(self.selected_files)} 个文件")
+            else:
+                print(f"[INFO] 文件已在列表中，跳过")
             
             # 更新显示
             if self.selected_files:
