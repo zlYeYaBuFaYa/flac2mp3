@@ -316,7 +316,7 @@ class ConverterUI:
                     self.folder_btn = ui.button("选择文件夹", on_click=self._set_folder_mode).classes("file-btn").style("width: 180px; min-width: 180px; max-width: 180px;")
             
             # 进度条
-            self.progress_bar = ui.linear_progress(show_value=False).classes("w-full mt-4").style("display: none; width: 100%;")
+            self.progress_bar = ui.linear_progress(show_value=False).classes("w-full mt-4").style("width: 100%; visibility: hidden;")
             
             # 状态标签（支持多行显示）
             self.status_label = ui.label("").classes("text-center mt-2").style("text-align: center; width: 100%; white-space: pre-line;")
@@ -414,8 +414,17 @@ class ConverterUI:
                 if folder_path.exists() and folder_path.is_dir():
                     # 保存文件夹路径，用于确定输出目录
                     self.selected_folder_path = folder_path
-                    # 查找文件夹中的所有 FLAC 文件
-                    flac_files = list(folder_path.rglob("*.flac")) + list(folder_path.rglob("*.FLAC"))
+                    # 查找文件夹中的所有 FLAC 文件（只搜索当前目录，不递归）
+                    # 使用 glob 而不是 rglob，避免递归搜索子目录
+                    # 使用集合去重，避免大小写不同导致的重复
+                    flac_files_set = set()
+                    for pattern in ["*.flac", "*.FLAC"]:
+                        for file_path in folder_path.glob(pattern):
+                            # 只包含文件，不包括目录
+                            if file_path.is_file():
+                                flac_files_set.add(file_path)
+                    # 转换为列表并排序，保持顺序一致
+                    flac_files = sorted(list(flac_files_set))
                     self.selected_files = flac_files
                     
                     if flac_files:
@@ -627,13 +636,15 @@ class ConverterUI:
         self.client_disconnected = False  # 重置客户端断开标志
         self._safe_update_ui(lambda: self.convert_btn.disable())
         self._safe_update_ui(lambda: setattr(self.convert_btn, 'text', "转换中..."))
-        self._safe_update_ui(lambda: self.progress_bar.style("display: block"))
+        # 显示进度条（使用 visibility 而不是 display，避免布局问题）
+        self._safe_update_ui(lambda: self.progress_bar.style("visibility: visible;"))
         self._safe_update_ui(lambda: setattr(self.progress_bar, 'value', 0))
         self._safe_update_ui(lambda: setattr(self.status_label, 'text', "准备开始转换..."))
         
         try:
             # 直接使用选择的文件路径（已经是本地路径，不需要上传）
-            all_flac_files = []
+            # 使用集合去重，避免重复文件
+            all_flac_files_set = set()
             
             print(f"\n[DEBUG] ===== 开始转换 =====")
             print(f"[DEBUG] 已选择的文件数: {len(self.selected_files)}")
@@ -644,14 +655,17 @@ class ConverterUI:
                 # 确保文件存在且是 FLAC 文件
                 if file_path.exists() and file_path.is_file():
                     if file_path.suffix.lower() == '.flac':
-                        all_flac_files.append(file_path)
+                        # 使用文件路径的绝对路径作为键，确保去重
+                        all_flac_files_set.add(file_path.resolve())
                         print(f"[INFO] ✓ 添加文件: {file_path.name}")
                     else:
                         print(f"[WARNING] ✗ 跳过非 FLAC 文件: {file_path.name}")
                 else:
                     print(f"[ERROR] ✗ 文件不存在或不是文件: {file_path}")
             
-            print(f"[INFO] 收集到 {len(all_flac_files)} 个有效的 FLAC 文件")
+            # 转换为列表并排序，保持顺序一致
+            all_flac_files = sorted(list(all_flac_files_set))
+            print(f"[INFO] 收集到 {len(all_flac_files)} 个有效的 FLAC 文件（已去重）")
             
             if not all_flac_files:
                 error_msg = "未找到任何 FLAC 文件。请检查选择的文件路径是否正确。"
@@ -765,7 +779,8 @@ class ConverterUI:
                     self.convert_btn.text = "开始转换"
                     # 保持进度条和状态标签显示一段时间，让用户看到完成信息
                     await asyncio.sleep(3)
-                    self.progress_bar.style("display: none")
+                    # 隐藏进度条（但保留布局空间）
+                    self.progress_bar.style("visibility: hidden;")
                 except RuntimeError as e:
                     # 如果客户端已断开，只记录日志
                     if "client" in str(e).lower() or "deleted" in str(e).lower():
