@@ -21,7 +21,8 @@ class ConverterUI:
         self.selected_files: List[Path] = []  # 存储文件路径（本地路径）
         self.is_file_mode = True
         self.is_converting = False
-        self.output_dir: Optional[Path] = None
+        self.selected_folder_path: Optional[Path] = None  # 存储选择的文件夹路径（用于确定输出目录）
+        self.client_disconnected = False  # 标记客户端是否已断开
         
         # UI 组件
         self.file_btn = None
@@ -35,7 +36,6 @@ class ConverterUI:
         self.convert_btn = None
         self.progress_bar = None
         self.status_label = None
-        self.log_area = None
         
         self._init_converter()
         self._setup_ui()
@@ -50,14 +50,20 @@ class ConverterUI:
     
     def _safe_update_ui(self, update_func, silent=False):
         """安全更新 UI 元素，捕获客户端断开异常"""
+        # 如果客户端已断开，直接返回，不再尝试更新
+        if self.client_disconnected:
+            return False
+            
         try:
             update_func()
             return True
         except RuntimeError as e:
             if "client" in str(e).lower() or "deleted" in str(e).lower():
-                # 客户端已断开，只记录日志，不抛出异常
-                if not silent:
-                    logger.warning(f"客户端已断开，跳过 UI 更新: {e}")
+                # 客户端已断开，设置标志并记录一次警告
+                if not self.client_disconnected:
+                    self.client_disconnected = True
+                    if not silent:
+                        logger.info("客户端已断开连接，后续 UI 更新将静默跳过")
                 return False
             else:
                 # 其他运行时错误，继续抛出
@@ -312,12 +318,8 @@ class ConverterUI:
             # 进度条
             self.progress_bar = ui.linear_progress(show_value=False).classes("w-full mt-4").style("display: none; width: 100%;")
             
-            # 状态标签
-            self.status_label = ui.label("").classes("text-center mt-2").style("text-align: center; width: 100%;")
-            
-            # 日志区域
-            with ui.expansion("转换日志", icon="description").classes("w-full mt-4").style("width: 100%;"):
-                self.log_area = ui.log().classes("w-full h-40").style("width: 100%;")
+            # 状态标签（支持多行显示）
+            self.status_label = ui.label("").classes("text-center mt-2").style("text-align: center; width: 100%; white-space: pre-line;")
         
     def _set_file_mode(self):
         """设置为文件模式（显示路径输入对话框）"""
@@ -622,12 +624,12 @@ class ConverterUI:
         
         # 更新 UI 状态
         self.is_converting = True
+        self.client_disconnected = False  # 重置客户端断开标志
         self._safe_update_ui(lambda: self.convert_btn.disable())
         self._safe_update_ui(lambda: setattr(self.convert_btn, 'text', "转换中..."))
         self._safe_update_ui(lambda: self.progress_bar.style("display: block"))
         self._safe_update_ui(lambda: setattr(self.progress_bar, 'value', 0))
         self._safe_update_ui(lambda: setattr(self.status_label, 'text', "准备开始转换..."))
-        self._safe_update_ui(lambda: self.log_area.clear())
         
         try:
             # 直接使用选择的文件路径（已经是本地路径，不需要上传）
@@ -688,10 +690,6 @@ class ConverterUI:
             
             total = len(all_flac_files)
             self._safe_update_ui(lambda: setattr(self.status_label, 'text', f"准备转换 {total} 个文件..."))
-            self._safe_update_ui(lambda: self.log_area.push(f"找到 {total} 个 FLAC 文件，开始转换..."))
-            self._safe_update_ui(lambda: self.log_area.push(f"MP3 输出目录: {mp3_output_dir}"))
-            self._safe_update_ui(lambda: self.log_area.push(f"转换质量: {bitrate} kbps"))
-            self._safe_update_ui(lambda: self.log_area.push("-" * 50))
             
             # 转换文件
             converted_count = 0
@@ -702,13 +700,11 @@ class ConverterUI:
                     # 更新进度（0-1之间的值）
                     progress = idx / total
                     progress_percent = int(progress * 100)
+                    status_text = f"正在转换: {flac_file.name} ({idx}/{total}) - {progress_percent}%"
                     
-                    # 安全更新UI元素
-                    self._safe_update_ui(lambda: setattr(self.progress_bar, 'value', progress))
-                    self._safe_update_ui(lambda: setattr(self.status_label, 'text', 
-                        f"正在转换: {flac_file.name} ({idx}/{total}) - {progress_percent}%"))
-                    self._safe_update_ui(lambda: self.log_area.push(
-                        f"[{idx}/{total}] ({progress_percent}%) 正在转换: {flac_file.name}"))
+                    # 安全更新UI元素（使用默认参数避免闭包问题）
+                    self._safe_update_ui(lambda p=progress: setattr(self.progress_bar, 'value', p))
+                    self._safe_update_ui(lambda text=status_text: setattr(self.status_label, 'text', text))
                     
                     # 执行转换，输出到 mp3 目录
                     output_file = self.converter.convert_file(
@@ -718,67 +714,68 @@ class ConverterUI:
                     )
                     
                     converted_count += 1
-                    self._safe_update_ui(lambda: self.log_area.push(f"  ✓ 成功: {output_file.name}"))
                     
                     # 更新进度状态（转换成功后）
-                    self._safe_update_ui(lambda: setattr(self.status_label, 'text',
-                        f"已转换 {idx}/{total} 个文件 ({progress_percent}%) - 当前: {flac_file.name}"))
+                    success_status_text = f"已转换 {idx}/{total} 个文件 ({progress_percent}%) - 当前: {flac_file.name}"
+                    self._safe_update_ui(lambda text=success_status_text: setattr(self.status_label, 'text', text))
                     
                     # 让 UI 更新
                     await asyncio.sleep(0.01)
                     
                 except Exception as e:
                     failed_count += 1
-                    error_msg = f"  ✗ 失败: {flac_file.name} - {str(e)}"
-                    self._safe_update_ui(lambda: self.log_area.push(error_msg), silent=True)
+                    error_msg = f"✗ 失败: {flac_file.name} - {str(e)}"
                     logger.error(error_msg)
                     
                     # 更新进度状态（即使失败也更新）
                     progress_percent = int((idx / total) * 100)
-                    self._safe_update_ui(lambda: setattr(self.status_label, 'text',
-                        f"已处理 {idx}/{total} 个文件 ({progress_percent}%) - 当前失败: {flac_file.name}"))
+                    error_status_text = f"已处理 {idx}/{total} 个文件 ({progress_percent}%) - 当前失败: {flac_file.name}"
+                    self._safe_update_ui(lambda text=error_status_text: setattr(self.status_label, 'text', text))
             
             # 转换完成
             self._safe_update_ui(lambda: setattr(self.progress_bar, 'value', 1.0))
-            self._safe_update_ui(lambda: self.log_area.push("-" * 50))
             
             # 生成完成提示信息
             if failed_count == 0:
                 completion_msg = f"✅ 转换完成！成功转换 {converted_count} 个文件"
-                self._safe_update_ui(lambda: setattr(self.status_label, 'text', completion_msg))
-                self._safe_update_ui(lambda: ui.notify(completion_msg, type="positive", timeout=5))
-                self._safe_update_ui(lambda: self.log_area.push(completion_msg))
-                self._safe_update_ui(lambda: self.log_area.push(f"所有文件已保存到: {mp3_output_dir}"))
+                completion_detail = f"所有文件已保存到: {mp3_output_dir}"
+                final_status_text = f"{completion_msg}\n{completion_detail}"
+                self._safe_update_ui(lambda text=final_status_text: setattr(self.status_label, 'text', text))
+                self._safe_update_ui(lambda msg=completion_msg: ui.notify(msg, type="positive", timeout=5))
             else:
                 completion_msg = f"⚠️ 转换完成：成功 {converted_count} 个，失败 {failed_count} 个"
-                self._safe_update_ui(lambda: setattr(self.status_label, 'text', completion_msg))
-                self._safe_update_ui(lambda: ui.notify(completion_msg, type="warning", timeout=5))
-                self._safe_update_ui(lambda: self.log_area.push(completion_msg))
-                self._safe_update_ui(lambda: self.log_area.push(f"成功文件已保存到: {mp3_output_dir}"))
+                completion_detail = f"成功文件已保存到: {mp3_output_dir}"
+                final_status_text = f"{completion_msg}\n{completion_detail}"
+                self._safe_update_ui(lambda text=final_status_text: setattr(self.status_label, 'text', text))
+                self._safe_update_ui(lambda msg=completion_msg: ui.notify(msg, type="warning", timeout=5))
             
         except Exception as e:
             error_msg = f"❌ 转换过程出错: {str(e)}"
-            self._safe_update_ui(lambda: self.log_area.push("-" * 50), silent=True)
-            self._safe_update_ui(lambda: self.log_area.push(error_msg), silent=True)
-            self._safe_update_ui(lambda: setattr(self.status_label, 'text', "❌ 转换失败"), silent=True)
-            self._safe_update_ui(lambda: ui.notify(error_msg, type="negative", timeout=5), silent=True)
+            self._safe_update_ui(lambda text=error_msg: setattr(self.status_label, 'text', text), silent=True)
+            self._safe_update_ui(lambda msg=error_msg: ui.notify(msg, type="negative", timeout=5), silent=True)
             logger.error(error_msg, exc_info=True)
         
         finally:
             # 恢复 UI 状态
             self.is_converting = False
-            try:
-                self.convert_btn.enable()
-                self.convert_btn.text = "开始转换"
-                # 保持进度条和状态标签显示一段时间，让用户看到完成信息
-                await asyncio.sleep(3)
-                self.progress_bar.style("display: none")
-            except RuntimeError as e:
-                # 如果客户端已断开，只记录日志
-                if "client" in str(e).lower() or "deleted" in str(e).lower():
-                    logger.warning("客户端已断开，跳过 UI 状态恢复")
-                else:
-                    raise
+            # 注意：如果客户端已断开，不再尝试更新UI
+            if not self.client_disconnected:
+                try:
+                    self.convert_btn.enable()
+                    self.convert_btn.text = "开始转换"
+                    # 保持进度条和状态标签显示一段时间，让用户看到完成信息
+                    await asyncio.sleep(3)
+                    self.progress_bar.style("display: none")
+                except RuntimeError as e:
+                    # 如果客户端已断开，只记录日志
+                    if "client" in str(e).lower() or "deleted" in str(e).lower():
+                        self.client_disconnected = True
+                        logger.info("客户端已断开，跳过 UI 状态恢复")
+                    else:
+                        raise
+            else:
+                # 客户端已断开，只记录日志
+                logger.info("转换完成（客户端已断开，UI 状态未恢复）")
 
 
 def create_app():
