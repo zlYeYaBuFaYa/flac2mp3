@@ -48,6 +48,24 @@ class ConverterUI:
             logger.error(f"初始化转换器失败: {e}")
             ui.notify(f"错误: {e}", type="negative", position="top")
     
+    def _safe_update_ui(self, update_func, silent=False):
+        """安全更新 UI 元素，捕获客户端断开异常"""
+        try:
+            update_func()
+            return True
+        except RuntimeError as e:
+            if "client" in str(e).lower() or "deleted" in str(e).lower():
+                # 客户端已断开，只记录日志，不抛出异常
+                if not silent:
+                    logger.warning(f"客户端已断开，跳过 UI 更新: {e}")
+                return False
+            else:
+                # 其他运行时错误，继续抛出
+                raise
+        except Exception as e:
+            logger.error(f"更新 UI 时出错: {e}", exc_info=True)
+            return False
+    
     def _setup_ui(self):
         """设置用户界面"""
         # 设置页面样式
@@ -604,12 +622,12 @@ class ConverterUI:
         
         # 更新 UI 状态
         self.is_converting = True
-        self.convert_btn.disable()
-        self.convert_btn.text = "转换中..."
-        self.progress_bar.style("display: block")
-        self.progress_bar.value = 0
-        self.status_label.text = "准备开始转换..."
-        self.log_area.clear()
+        self._safe_update_ui(lambda: self.convert_btn.disable())
+        self._safe_update_ui(lambda: setattr(self.convert_btn, 'text', "转换中..."))
+        self._safe_update_ui(lambda: self.progress_bar.style("display: block"))
+        self._safe_update_ui(lambda: setattr(self.progress_bar, 'value', 0))
+        self._safe_update_ui(lambda: setattr(self.status_label, 'text', "准备开始转换..."))
+        self._safe_update_ui(lambda: self.log_area.clear())
         
         try:
             # 直接使用选择的文件路径（已经是本地路径，不需要上传）
@@ -669,11 +687,11 @@ class ConverterUI:
                 return
             
             total = len(all_flac_files)
-            self.status_label.text = f"准备转换 {total} 个文件..."
-            self.log_area.push(f"找到 {total} 个 FLAC 文件，开始转换...")
-            self.log_area.push(f"MP3 输出目录: {mp3_output_dir}")
-            self.log_area.push(f"转换质量: {bitrate} kbps")
-            self.log_area.push("-" * 50)
+            self._safe_update_ui(lambda: setattr(self.status_label, 'text', f"准备转换 {total} 个文件..."))
+            self._safe_update_ui(lambda: self.log_area.push(f"找到 {total} 个 FLAC 文件，开始转换..."))
+            self._safe_update_ui(lambda: self.log_area.push(f"MP3 输出目录: {mp3_output_dir}"))
+            self._safe_update_ui(lambda: self.log_area.push(f"转换质量: {bitrate} kbps"))
+            self._safe_update_ui(lambda: self.log_area.push("-" * 50))
             
             # 转换文件
             converted_count = 0
@@ -683,11 +701,14 @@ class ConverterUI:
                 try:
                     # 更新进度（0-1之间的值）
                     progress = idx / total
-                    self.progress_bar.value = progress
-                    # 显示详细的进度信息：当前文件、进度百分比
                     progress_percent = int(progress * 100)
-                    self.status_label.text = f"正在转换: {flac_file.name} ({idx}/{total}) - {progress_percent}%"
-                    self.log_area.push(f"[{idx}/{total}] ({progress_percent}%) 正在转换: {flac_file.name}")
+                    
+                    # 安全更新UI元素
+                    self._safe_update_ui(lambda: setattr(self.progress_bar, 'value', progress))
+                    self._safe_update_ui(lambda: setattr(self.status_label, 'text', 
+                        f"正在转换: {flac_file.name} ({idx}/{total}) - {progress_percent}%"))
+                    self._safe_update_ui(lambda: self.log_area.push(
+                        f"[{idx}/{total}] ({progress_percent}%) 正在转换: {flac_file.name}"))
                     
                     # 执行转换，输出到 mp3 目录
                     output_file = self.converter.convert_file(
@@ -697,11 +718,11 @@ class ConverterUI:
                     )
                     
                     converted_count += 1
-                    self.log_area.push(f"  ✓ 成功: {output_file.name}")
+                    self._safe_update_ui(lambda: self.log_area.push(f"  ✓ 成功: {output_file.name}"))
                     
                     # 更新进度状态（转换成功后）
-                    progress_percent = int((idx / total) * 100)
-                    self.status_label.text = f"已转换 {idx}/{total} 个文件 ({progress_percent}%) - 当前: {flac_file.name}"
+                    self._safe_update_ui(lambda: setattr(self.status_label, 'text',
+                        f"已转换 {idx}/{total} 个文件 ({progress_percent}%) - 当前: {flac_file.name}"))
                     
                     # 让 UI 更新
                     await asyncio.sleep(0.01)
@@ -709,44 +730,38 @@ class ConverterUI:
                 except Exception as e:
                     failed_count += 1
                     error_msg = f"  ✗ 失败: {flac_file.name} - {str(e)}"
-                    self.log_area.push(error_msg)
+                    self._safe_update_ui(lambda: self.log_area.push(error_msg), silent=True)
                     logger.error(error_msg)
                     
                     # 更新进度状态（即使失败也更新）
                     progress_percent = int((idx / total) * 100)
-                    self.status_label.text = f"已处理 {idx}/{total} 个文件 ({progress_percent}%) - 当前失败: {flac_file.name}"
+                    self._safe_update_ui(lambda: setattr(self.status_label, 'text',
+                        f"已处理 {idx}/{total} 个文件 ({progress_percent}%) - 当前失败: {flac_file.name}"))
             
             # 转换完成
-            self.progress_bar.value = 1.0
-            self.log_area.push("-" * 50)
+            self._safe_update_ui(lambda: setattr(self.progress_bar, 'value', 1.0))
+            self._safe_update_ui(lambda: self.log_area.push("-" * 50))
             
             # 生成完成提示信息
             if failed_count == 0:
                 completion_msg = f"✅ 转换完成！成功转换 {converted_count} 个文件"
-                self.status_label.text = completion_msg
-                ui.notify(completion_msg, type="positive", timeout=5)
-                self.log_area.push(completion_msg)
-                self.log_area.push(f"所有文件已保存到: {mp3_output_dir}")
+                self._safe_update_ui(lambda: setattr(self.status_label, 'text', completion_msg))
+                self._safe_update_ui(lambda: ui.notify(completion_msg, type="positive", timeout=5))
+                self._safe_update_ui(lambda: self.log_area.push(completion_msg))
+                self._safe_update_ui(lambda: self.log_area.push(f"所有文件已保存到: {mp3_output_dir}"))
             else:
                 completion_msg = f"⚠️ 转换完成：成功 {converted_count} 个，失败 {failed_count} 个"
-                self.status_label.text = completion_msg
-                ui.notify(completion_msg, type="warning", timeout=5)
-                self.log_area.push(completion_msg)
-                self.log_area.push(f"成功文件已保存到: {mp3_output_dir}")
+                self._safe_update_ui(lambda: setattr(self.status_label, 'text', completion_msg))
+                self._safe_update_ui(lambda: ui.notify(completion_msg, type="warning", timeout=5))
+                self._safe_update_ui(lambda: self.log_area.push(completion_msg))
+                self._safe_update_ui(lambda: self.log_area.push(f"成功文件已保存到: {mp3_output_dir}"))
             
         except Exception as e:
             error_msg = f"❌ 转换过程出错: {str(e)}"
-            try:
-                self.log_area.push("-" * 50)
-                self.log_area.push(error_msg)
-                self.status_label.text = "❌ 转换失败"
-                ui.notify(error_msg, type="negative", timeout=5)
-            except RuntimeError as ui_error:
-                # 如果客户端已断开，只记录日志
-                if "client" in str(ui_error).lower() or "deleted" in str(ui_error).lower():
-                    logger.warning("客户端已断开，跳过 UI 错误提示")
-                else:
-                    raise
+            self._safe_update_ui(lambda: self.log_area.push("-" * 50), silent=True)
+            self._safe_update_ui(lambda: self.log_area.push(error_msg), silent=True)
+            self._safe_update_ui(lambda: setattr(self.status_label, 'text', "❌ 转换失败"), silent=True)
+            self._safe_update_ui(lambda: ui.notify(error_msg, type="negative", timeout=5), silent=True)
             logger.error(error_msg, exc_info=True)
         
         finally:

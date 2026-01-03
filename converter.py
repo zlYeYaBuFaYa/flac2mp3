@@ -83,16 +83,27 @@ class AudioConverter:
         
         try:
             # 执行转换
+            # 在Windows上处理编码问题：使用UTF-8编码，如果失败则使用errors='ignore'
+            import sys
+            encoding = 'utf-8' if sys.platform != 'win32' else 'utf-8'
+            
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
+                encoding=encoding,
+                errors='replace',  # 遇到无法解码的字符时替换为替换字符，而不是抛出异常
                 check=True
             )
             logger.info(f"转换成功: {input_file.name} -> {output_file.name}")
             return output_file
         except subprocess.CalledProcessError as e:
-            error_msg = f"转换失败: {input_file.name}\n错误信息: {e.stderr}"
+            # 安全地获取错误信息，避免编码问题
+            try:
+                stderr_msg = e.stderr if e.stderr else str(e)
+            except (UnicodeDecodeError, AttributeError):
+                stderr_msg = "无法解码错误信息（编码问题）"
+            error_msg = f"转换失败: {input_file.name}\n错误信息: {stderr_msg}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
     
