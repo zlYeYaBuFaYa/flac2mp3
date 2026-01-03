@@ -398,7 +398,16 @@ class ConverterUI:
                     if flac_files:
                         total = len(flac_files)
                         folder_name = folder_path.name
-                        display_text = f"已选择文件夹: {folder_name} (包含 {total} 个 FLAC 文件)"
+                        # 优化多文件显示：如果文件数量很多，只显示文件夹名和数量
+                        if total > 10:
+                            display_text = f"已选择文件夹: {folder_name} (包含 {total} 个 FLAC 文件)"
+                        else:
+                            # 文件数量不多时，显示部分文件名
+                            file_names_preview = ", ".join([f.name for f in flac_files[:3]])
+                            if total > 3:
+                                display_text = f"已选择文件夹: {folder_name} ({file_names_preview} ... 等 {total} 个文件)"
+                            else:
+                                display_text = f"已选择文件夹: {folder_name} ({file_names_preview} 共 {total} 个文件)"
                         self.selected_files_label.text = display_text
                         self.selected_files_label.classes(remove="empty")
                         ui.notify(f"已找到 {total} 个 FLAC 文件", type="positive")
@@ -622,7 +631,7 @@ class ConverterUI:
             print(f"[INFO] 收集到 {len(all_flac_files)} 个有效的 FLAC 文件")
             
             if not all_flac_files:
-                error_msg = "未找到任何 FLAC 文件。请检查上传的文件是否仍然存在。"
+                error_msg = "未找到任何 FLAC 文件。请检查选择的文件路径是否正确。"
                 print(f"[ERROR] {error_msg}")
                 ui.notify(error_msg, type="warning")
                 return
