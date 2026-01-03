@@ -357,6 +357,7 @@ class ConverterUI:
         try:
             if self.is_file_mode:
                 # 文件模式：支持多个文件路径（用分号分隔）
+                self.selected_folder_path = None  # 清除文件夹路径
                 paths = [p.strip() for p in path_str.split(';') if p.strip()]
                 file_paths = []
                 
@@ -391,6 +392,8 @@ class ConverterUI:
                 # 文件夹模式
                 folder_path = Path(path_str)
                 if folder_path.exists() and folder_path.is_dir():
+                    # 保存文件夹路径，用于确定输出目录
+                    self.selected_folder_path = folder_path
                     # 查找文件夹中的所有 FLAC 文件
                     flac_files = list(folder_path.rglob("*.flac")) + list(folder_path.rglob("*.FLAC"))
                     self.selected_files = flac_files
@@ -636,15 +639,26 @@ class ConverterUI:
                 ui.notify(error_msg, type="warning")
                 return
             
-            # 检查输出目录
-            if not self.output_dir:
-                error_msg = "请先设置 MP3 输出目录"
-                print(f"[ERROR] {error_msg}")
-                ui.notify(error_msg, type="warning")
-                return
+            # 自动确定输出目录
+            # 如果选择的是文件，在文件的父目录的同级目录创建 mp3 文件夹
+            # 如果选择的是文件夹，在文件夹的同级目录创建 mp3 文件夹
+            if self.is_file_mode:
+                # 文件模式：取第一个文件的父目录，在其同级目录创建 mp3 文件夹
+                first_file = all_flac_files[0]
+                parent_dir = first_file.parent
+                mp3_output_dir = parent_dir.parent / "mp3"
+                print(f"[INFO] 文件模式：使用第一个文件的父目录 {parent_dir} 的同级目录创建 mp3 文件夹")
+            else:
+                # 文件夹模式：在选择的文件夹的同级目录创建 mp3 文件夹
+                if self.selected_folder_path:
+                    folder_path = self.selected_folder_path
+                else:
+                    # 如果没有保存文件夹路径，使用第一个文件的父目录（回退方案）
+                    folder_path = all_flac_files[0].parent
+                mp3_output_dir = folder_path.parent / "mp3"
+                print(f"[INFO] 文件夹模式：在文件夹 {folder_path} 的同级目录创建 mp3 文件夹")
             
-            # 确保输出目录存在
-            mp3_output_dir = self.output_dir
+            # 创建输出目录
             try:
                 mp3_output_dir.mkdir(parents=True, exist_ok=True)
                 print(f"[INFO] 输出目录已准备: {mp3_output_dir}")
