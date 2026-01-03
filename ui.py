@@ -669,8 +669,11 @@ class ConverterUI:
                 return
             
             total = len(all_flac_files)
+            self.status_label.text = f"准备转换 {total} 个文件..."
             self.log_area.push(f"找到 {total} 个 FLAC 文件，开始转换...")
             self.log_area.push(f"MP3 输出目录: {mp3_output_dir}")
+            self.log_area.push(f"转换质量: {bitrate} kbps")
+            self.log_area.push("-" * 50)
             
             # 转换文件
             converted_count = 0
@@ -678,11 +681,13 @@ class ConverterUI:
             
             for idx, flac_file in enumerate(all_flac_files, 1):
                 try:
-                    # 更新进度
+                    # 更新进度（0-1之间的值）
                     progress = idx / total
                     self.progress_bar.value = progress
-                    self.status_label.text = f"正在转换: {flac_file.name} ({idx}/{total})"
-                    self.log_area.push(f"[{idx}/{total}] 转换: {flac_file.name}")
+                    # 显示详细的进度信息：当前文件、进度百分比
+                    progress_percent = int(progress * 100)
+                    self.status_label.text = f"正在转换: {flac_file.name} ({idx}/{total}) - {progress_percent}%"
+                    self.log_area.push(f"[{idx}/{total}] ({progress_percent}%) 正在转换: {flac_file.name}")
                     
                     # 执行转换，输出到 mp3 目录
                     output_file = self.converter.convert_file(
@@ -692,42 +697,73 @@ class ConverterUI:
                     )
                     
                     converted_count += 1
-                    self.log_area.push(f"✓ 成功: {output_file.name}")
+                    self.log_area.push(f"  ✓ 成功: {output_file.name}")
+                    
+                    # 更新进度状态（转换成功后）
+                    progress_percent = int((idx / total) * 100)
+                    self.status_label.text = f"已转换 {idx}/{total} 个文件 ({progress_percent}%) - 当前: {flac_file.name}"
                     
                     # 让 UI 更新
                     await asyncio.sleep(0.01)
                     
                 except Exception as e:
                     failed_count += 1
-                    error_msg = f"✗ 失败: {flac_file.name} - {str(e)}"
+                    error_msg = f"  ✗ 失败: {flac_file.name} - {str(e)}"
                     self.log_area.push(error_msg)
                     logger.error(error_msg)
+                    
+                    # 更新进度状态（即使失败也更新）
+                    progress_percent = int((idx / total) * 100)
+                    self.status_label.text = f"已处理 {idx}/{total} 个文件 ({progress_percent}%) - 当前失败: {flac_file.name}"
             
             # 转换完成
             self.progress_bar.value = 1.0
-            self.status_label.text = f"转换完成！成功: {converted_count}, 失败: {failed_count}"
+            self.log_area.push("-" * 50)
             
+            # 生成完成提示信息
             if failed_count == 0:
-                ui.notify(f"转换完成！共转换 {converted_count} 个文件", type="positive")
+                completion_msg = f"✅ 转换完成！成功转换 {converted_count} 个文件"
+                self.status_label.text = completion_msg
+                ui.notify(completion_msg, type="positive", timeout=5)
+                self.log_area.push(completion_msg)
+                self.log_area.push(f"所有文件已保存到: {mp3_output_dir}")
             else:
-                ui.notify(f"转换完成，但有 {failed_count} 个文件失败", type="warning")
-            
-            self.log_area.push(f"\n转换完成！成功: {converted_count}, 失败: {failed_count}")
+                completion_msg = f"⚠️ 转换完成：成功 {converted_count} 个，失败 {failed_count} 个"
+                self.status_label.text = completion_msg
+                ui.notify(completion_msg, type="warning", timeout=5)
+                self.log_area.push(completion_msg)
+                self.log_area.push(f"成功文件已保存到: {mp3_output_dir}")
             
         except Exception as e:
-            error_msg = f"转换过程出错: {str(e)}"
-            self.log_area.push(error_msg)
-            self.status_label.text = "转换失败"
-            ui.notify(error_msg, type="negative")
-            logger.error(error_msg)
+            error_msg = f"❌ 转换过程出错: {str(e)}"
+            try:
+                self.log_area.push("-" * 50)
+                self.log_area.push(error_msg)
+                self.status_label.text = "❌ 转换失败"
+                ui.notify(error_msg, type="negative", timeout=5)
+            except RuntimeError as ui_error:
+                # 如果客户端已断开，只记录日志
+                if "client" in str(ui_error).lower() or "deleted" in str(ui_error).lower():
+                    logger.warning("客户端已断开，跳过 UI 错误提示")
+                else:
+                    raise
+            logger.error(error_msg, exc_info=True)
         
         finally:
             # 恢复 UI 状态
             self.is_converting = False
-            self.convert_btn.enable()
-            self.convert_btn.text = "开始转换"
-            await asyncio.sleep(2)
-            self.progress_bar.style("display: none")
+            try:
+                self.convert_btn.enable()
+                self.convert_btn.text = "开始转换"
+                # 保持进度条和状态标签显示一段时间，让用户看到完成信息
+                await asyncio.sleep(3)
+                self.progress_bar.style("display: none")
+            except RuntimeError as e:
+                # 如果客户端已断开，只记录日志
+                if "client" in str(e).lower() or "deleted" in str(e).lower():
+                    logger.warning("客户端已断开，跳过 UI 状态恢复")
+                else:
+                    raise
 
 
 def create_app():
