@@ -59,69 +59,83 @@
             margin-bottom: 10px;
         }
 
+        .file-selector-container {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            margin-top: 24px;
+        }
+
         .file-selector {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 12px;
+            justify-content: center;
         }
 
         .file-btn {
             flex: 1;
-            padding: 14px 20px;
-            background: #f5f5f5;
-            border: 2px dashed #ddd;
-            border-radius: 12px;
+            max-width: 180px;
+            padding: 12px 20px;
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
             cursor: pointer;
             text-align: center;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             font-size: 14px;
-            color: #666;
+            font-weight: 500;
+            color: #555;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
         .file-btn:hover {
-            background: #e8e8e8;
+            background: #f5f5f5;
             border-color: #667eea;
             color: #667eea;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(102, 126, 234, 0.15);
         }
 
         .file-btn.active {
             background: #667eea;
             border-color: #667eea;
             color: white;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
         }
 
         .file-input-wrapper {
             position: relative;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
 
         .file-input {
             width: 100%;
-            padding: 14px 20px;
+            padding: 12px 16px;
             background: #f8f9fa;
-            border: 2px solid #e0e0e0;
-            border-radius: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
             font-size: 14px;
             color: #333;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
         }
 
         .file-input:hover {
             border-color: #667eea;
-            background: #f0f0ff;
+            background: #f5f5f5;
         }
 
         .file-input::file-selector-button {
-            padding: 8px 16px;
+            padding: 6px 14px;
             background: #667eea;
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 13px;
-            margin-right: 12px;
-            transition: background 0.3s ease;
+            margin-right: 10px;
+            transition: background 0.2s ease;
         }
 
         .file-input::file-selector-button:hover {
@@ -156,24 +170,55 @@
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
-        .convert-btn {
+        .top-controls {
+            margin-bottom: 30px;
+        }
+
+        .quality-convert-row {
+            display: flex;
+            gap: 16px;
+            align-items: flex-end;
+            justify-content: center;
+        }
+
+        .quality-wrapper {
+            flex: 1;
+            max-width: 380px;
+        }
+
+        .quality-wrapper label {
+            display: block;
+            color: #333;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .quality-convert-row .quality-select {
             width: 100%;
-            padding: 16px;
+            margin: 0;
+        }
+
+        .convert-btn {
+            flex: 0 0 auto;
+            min-width: 140px;
+            padding: 12px 28px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-radius: 12px;
-            font-size: 16px;
+            border-radius: 10px;
+            font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-            margin-top: 10px;
+            transition: all 0.2s ease;
+            box-shadow: 0 3px 12px rgba(102, 126, 234, 0.35);
+            height: fit-content;
         }
 
         .convert-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(102, 126, 234, 0.45);
         }
 
         .convert-btn:active {
@@ -188,15 +233,16 @@
         }
 
         .selected-files {
-            margin-top: 15px;
-            padding: 12px;
+            margin-top: 12px;
+            padding: 10px 14px;
             background: #f8f9fa;
             border-radius: 8px;
             font-size: 13px;
             color: #666;
-            min-height: 40px;
+            min-height: 36px;
             display: flex;
             align-items: center;
+            justify-content: center;
         }
 
         .selected-files.empty {
@@ -219,14 +265,28 @@
         </div>
 
         <form id="converterForm">
-            <div class="form-group">
-                <label>选择文件或文件夹</label>
-                <div class="file-selector">
-                    <div class="file-btn active" id="fileBtn">选择文件</div>
-                    <div class="file-btn" id="folderBtn">选择文件夹</div>
+            <!-- 比特率选择和开始转换按钮（置顶，并排） -->
+            <div class="form-group top-controls">
+                <div class="quality-convert-row">
+                    <div class="quality-wrapper">
+                        <label>转换质量</label>
+                        <select id="qualitySelect" class="quality-select">
+                            <option value="320">高质量 (320 kbps) - 推荐</option>
+                            <option value="256">标准质量 (256 kbps)</option>
+                            <option value="192">中等质量 (192 kbps)</option>
+                            <option value="128">普通质量 (128 kbps)</option>
+                        </select>
+                    </div>
+                    <button type="button" class="convert-btn" id="convertBtn">
+                        开始转换
+                    </button>
                 </div>
+            </div>
+
+            <!-- 文件上传区域 -->
+            <div class="form-group">
                 <div class="file-input-wrapper">
-                    <input type="file" id="fileInput" class="file-input" accept=".flac" multiple>
+                    <input type="file" id="fileInput" class="file-input" accept=".flac" multiple style="display: none;">
                     <input type="file" id="folderInput" class="file-input" webkitdirectory directory style="display: none;">
                 </div>
                 <div class="selected-files empty" id="selectedFiles">
@@ -234,20 +294,13 @@
                 </div>
             </div>
 
-            <div class="form-group">
-                <label>转换质量</label>
-                <select id="qualitySelect" class="quality-select">
-                    <option value="320">高质量 (320 kbps) - 推荐</option>
-                    <option value="256">标准质量 (256 kbps)</option>
-                    <option value="192">中等质量 (192 kbps)</option>
-                    <option value="128">普通质量 (128 kbps)</option>
-                </select>
-                <div class="info-text">更高的比特率意味着更好的音质，但文件也会更大</div>
+            <!-- 选择文件/文件夹按钮（底部，阴影背景） -->
+            <div class="file-selector-container">
+                <div class="file-selector">
+                    <div class="file-btn active" id="fileBtn">选择文件</div>
+                    <div class="file-btn" id="folderBtn">选择文件夹</div>
+                </div>
             </div>
-
-            <button type="button" class="convert-btn" id="convertBtn">
-                开始转换
-            </button>
         </form>
     </div>
 
@@ -259,23 +312,19 @@
         const selectedFiles = document.getElementById('selectedFiles');
         const convertBtn = document.getElementById('convertBtn');
 
-        // 切换文件/文件夹选择模式
+        // 切换文件/文件夹选择模式并触发文件选择
         fileBtn.addEventListener('click', () => {
             fileBtn.classList.add('active');
             folderBtn.classList.remove('active');
-            fileInput.style.display = 'block';
-            folderInput.style.display = 'none';
-            selectedFiles.textContent = '未选择任何文件';
-            selectedFiles.classList.add('empty');
+            fileInput.value = ''; // 重置以允许重复选择同一文件
+            fileInput.click(); // 触发文件选择对话框
         });
 
         folderBtn.addEventListener('click', () => {
             folderBtn.classList.add('active');
             fileBtn.classList.remove('active');
-            fileInput.style.display = 'none';
-            folderInput.style.display = 'block';
-            selectedFiles.textContent = '未选择任何文件夹';
-            selectedFiles.classList.add('empty');
+            folderInput.value = ''; // 重置以允许重复选择同一文件夹
+            folderInput.click(); // 触发文件夹选择对话框
         });
 
         // 文件选择处理

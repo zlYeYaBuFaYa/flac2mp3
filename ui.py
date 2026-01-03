@@ -18,8 +18,7 @@ class ConverterUI:
     def __init__(self):
         """初始化界面"""
         self.converter = None
-        self.selected_files: List[Path] = []  # 存储文件路径
-        self.selected_file_names: dict = {}  # 存储原始文件名映射 {path: original_name}
+        self.selected_files: List[Path] = []  # 存储文件路径（本地路径）
         self.is_file_mode = True
         self.is_converting = False
         self.output_dir: Optional[Path] = None
@@ -27,8 +26,7 @@ class ConverterUI:
         # UI 组件
         self.file_btn = None
         self.folder_btn = None
-        self.file_upload = None
-        self.folder_upload = None
+        self.file_path_input = None
         self.selected_files_label = None
         self.quality_select = None
         self.output_dir_input = None
@@ -66,11 +64,19 @@ class ConverterUI:
                 box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
                 padding: 40px;
                 max-width: 600px;
+                width: 100%;
                 margin: 20px auto;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
             }
             .header {
                 text-align: center;
                 margin-bottom: 40px;
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
             }
             .header h1 {
                 color: #333;
@@ -85,6 +91,10 @@ class ConverterUI:
             .form-group {
                 margin-bottom: 30px;
                 text-align: center;
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
             }
             .form-group label {
                 display: block;
@@ -94,49 +104,92 @@ class ConverterUI:
                 margin-bottom: 10px;
                 text-align: center;
             }
+            .file-selector-container {
+                background: #f8f9fa;
+                border-radius: 12px;
+                padding: 16px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+                margin-top: 24px;
+                width: 100%;
+                display: flex;
+                justify-content: center;
+            }
             .file-selector {
                 display: flex;
-                gap: 10px;
-                margin-bottom: 20px;
+                gap: 12px;
                 justify-content: center;
             }
             .file-btn {
                 flex: 1;
-                max-width: 200px;
-                min-width: 150px;
-                padding: 14px 20px;
-                background: #f5f5f5;
-                border: 2px dashed #ddd;
-                border-radius: 12px;
+                min-width: 180px;
+                max-width: 180px;
+                width: 180px;
+                padding: 12px 20px;
+                background: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 10px;
                 text-align: center;
                 font-size: 14px;
-                color: #666;
+                font-weight: 500;
+                color: #555;
                 cursor: pointer;
-                transition: all 0.3s ease;
+                transition: all 0.2s ease;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
             }
             .file-btn:hover {
-                background: #e8e8e8;
+                background: #f5f5f5;
                 border-color: #667eea;
                 color: #667eea;
+                transform: translateY(-1px);
+                box-shadow: 0 2px 6px rgba(102, 126, 234, 0.15);
             }
             .file-btn.active {
                 background: #667eea;
                 border-color: #667eea;
                 color: white;
+                box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
             }
             .selected-files {
-                margin-top: 15px;
-                padding: 12px;
+                margin-top: 12px;
+                padding: 10px 14px;
                 background: #f8f9fa;
                 border-radius: 8px;
                 font-size: 13px;
                 color: #666;
-                min-height: 40px;
+                min-height: 36px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
                 text-align: center;
             }
             .selected-files.empty {
                 color: #999;
                 font-style: italic;
+            }
+            .top-controls {
+                margin-bottom: 30px;
+            }
+            .quality-convert-row {
+                display: flex;
+                gap: 16px;
+                align-items: flex-end;
+                justify-content: center;
+            }
+            .quality-wrapper {
+                flex: 1;
+                max-width: 380px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            .quality-wrapper label {
+                display: block;
+                text-align: center;
+                margin-bottom: 8px;
+            }
+            .quality-convert-row .quality-select {
+                width: 100%;
+                margin: 0;
             }
             .info-text {
                 font-size: 12px;
@@ -145,22 +198,22 @@ class ConverterUI:
                 text-align: center;
             }
             .convert-btn {
-                width: 100%;
-                padding: 16px;
+                padding: 12px 28px;
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
                 border: none;
-                border-radius: 12px;
-                font-size: 16px;
+                border-radius: 10px;
+                font-size: 15px;
                 font-weight: 600;
                 cursor: pointer;
-                transition: all 0.3s ease;
-                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-                margin-top: 10px;
+                transition: all 0.2s ease;
+                box-shadow: 0 3px 12px rgba(102, 126, 234, 0.35);
+                min-width: 140px;
+                height: fit-content;
             }
             .convert-btn:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 16px rgba(102, 126, 234, 0.45);
             }
             .convert-btn:disabled {
                 background: #ccc;
@@ -173,60 +226,34 @@ class ConverterUI:
         
         with ui.card().classes("container"):
             # 标题区域
-            with ui.column().classes("header").style("text-align: center;"):
-                ui.label("🎵 FLAC to MP3 转换器").classes("text-h4 text-weight-bold").style("text-align: center;")
-                ui.label("轻松将 FLAC 音频文件转换为 MP3 格式").classes("text-body2 text-grey-7").style("text-align: center;")
+            with ui.column().classes("header").style("text-align: center; width: 100%; display: flex; flex-direction: column; align-items: center;"):
+                ui.label("🎵 FLAC to MP3 转换器").classes("text-h4 text-weight-bold").style("text-align: center; width: 100%; display: block;")
+                ui.label("轻松将 FLAC 音频文件转换为 MP3 格式").classes("text-body2 text-grey-7").style("text-align: center; width: 100%; display: block;")
             
-            # 文件选择区域
-            with ui.column().classes("form-group"):
-                with ui.row().style("width: 100%; justify-content: center;"):
-                    ui.label("选择文件或文件夹").classes("text-weight-medium")
-                
-                # 文件/文件夹切换按钮 - 使用居中容器
-                with ui.row().classes("file-selector gap-2").style("width: 100%; justify-content: center; margin: 0 auto;"):
-                    self.file_btn = ui.button("选择文件", on_click=self._switch_to_file_mode).classes("file-btn")
-                    self.folder_btn = ui.button("选择文件夹", on_click=self._switch_to_folder_mode).classes("file-btn")
-                
-                # 文件上传组件 - 居中
-                with ui.row().style("width: 100%; justify-content: center;"):
-                    self.file_upload = ui.upload(
-                        on_upload=self._handle_file_upload,
-                        auto_upload=True,
-                        multiple=True
-                    ).props("accept=.flac").style("max-width: 500px; width: 100%;")
-                
-                # 文件夹上传提示
-                with ui.row().style("width: 100%; justify-content: center;"):
-                    self.folder_hint = ui.label(
-                        "提示：在文件选择模式下，可以按住 Ctrl/Cmd 键选择多个文件，或直接选择文件夹中的所有 FLAC 文件"
-                    ).classes("text-caption text-grey-6 mt-2").style("display: none; text-align: center;")
-                
-                # 已选择文件显示
-                with ui.row().style("width: 100%; justify-content: center;"):
-                    self.selected_files_label = ui.label("未选择任何文件").classes("selected-files empty")
+            # 比特率选择和开始转换按钮（置顶，并排）
+            with ui.column().classes("form-group top-controls").style("width: 100%;"):
+                with ui.row().classes("quality-convert-row").style("width: 100%; justify-content: center;"):
+                    # 质量选择
+                    with ui.column().classes("quality-wrapper"):
+                        ui.label("转换质量").classes("text-weight-medium").style("text-align: center;")
+                        self.quality_select = ui.select(
+                            {
+                                "320": "高质量 (320 kbps) - 推荐",
+                                "256": "标准质量 (256 kbps)",
+                                "192": "中等质量 (192 kbps)",
+                                "128": "普通质量 (128 kbps)"
+                            },
+                            value="320"
+                        ).classes("quality-select").style("width: 100%;")
+                    
+                    # 开始转换按钮
+                    self.convert_btn = ui.button(
+                        "开始转换",
+                        on_click=self._start_conversion
+                    ).classes("convert-btn").style("min-width: 140px; padding: 12px 28px; height: fit-content;")
             
-            # 质量选择区域
-            with ui.column().classes("form-group"):
-                with ui.row().style("width: 100%; justify-content: center;"):
-                    ui.label("转换质量").classes("text-weight-medium")
-                
-                with ui.row().style("width: 100%; justify-content: center;"):
-                    self.quality_select = ui.select(
-                        {
-                            "320": "高质量 (320 kbps) - 推荐",
-                            "256": "标准质量 (256 kbps)",
-                            "192": "中等质量 (192 kbps)",
-                            "128": "普通质量 (128 kbps)"
-                        },
-                        value="320",
-                        label="比特率"
-                    ).style("max-width: 500px; width: 100%;")
-                
-                with ui.row().style("width: 100%; justify-content: center;"):
-                    ui.label("更高的比特率意味着更好的音质，但文件也会更大").classes("info-text")
-            
-            # 输出目录选择区域
-            with ui.column().classes("form-group"):
+            # 输出目录选择区域（隐藏但保留功能）
+            with ui.column().classes("form-group").style("display: none;"):
                 with ui.row().style("width: 100%; justify-content: center;"):
                     ui.label("输出目录").classes("text-weight-medium")
                 
@@ -246,50 +273,151 @@ class ConverterUI:
                 with ui.row().style("width: 100%; justify-content: center;"):
                     self.output_dir_label = ui.label("请输入 MP3 文件的输出目录").classes("text-caption text-grey-6")
             
-            # 转换按钮
-            with ui.row().style("width: 100%; justify-content: center; margin-top: 10px;"):
-                self.convert_btn = ui.button(
-                    "开始转换",
-                    on_click=self._start_conversion
-                ).classes("convert-btn").props("color=primary").style("max-width: 500px; width: 100%;")
+            # 文件选择区域（与效果图一致）
+            with ui.column().classes("form-group").style("width: 100%;"):
+                # 路径输入框（隐藏但功能保留）
+                self.file_path_input = ui.input(
+                    placeholder="请输入文件或文件夹路径",
+                    value="",
+                    on_change=lambda e: self._parse_and_validate_path()
+                ).style("display: none;")
+                
+                # 已选择文件显示
+                self.selected_files_label = ui.label("未选择任何文件").classes("selected-files empty").style("width: 100%; text-align: center;")
+            
+            # 选择文件/文件夹按钮（底部，阴影背景）
+            with ui.card().classes("file-selector-container").style("width: 100%;"):
+                with ui.row().classes("file-selector").style("width: 100%; justify-content: center;"):
+                    self.file_btn = ui.button("选择文件", on_click=self._set_file_mode).classes("file-btn").style("width: 180px; min-width: 180px; max-width: 180px;")
+                    self.folder_btn = ui.button("选择文件夹", on_click=self._set_folder_mode).classes("file-btn").style("width: 180px; min-width: 180px; max-width: 180px;")
             
             # 进度条
-            self.progress_bar = ui.linear_progress(show_value=False).classes("w-full mt-4").style("display: none")
+            self.progress_bar = ui.linear_progress(show_value=False).classes("w-full mt-4").style("display: none; width: 100%;")
             
             # 状态标签
-            self.status_label = ui.label("").classes("text-center mt-2")
+            self.status_label = ui.label("").classes("text-center mt-2").style("text-align: center; width: 100%;")
             
             # 日志区域
-            with ui.expansion("转换日志", icon="description").classes("w-full mt-4"):
-                self.log_area = ui.log().classes("w-full h-40")
+            with ui.expansion("转换日志", icon="description").classes("w-full mt-4").style("width: 100%;"):
+                self.log_area = ui.log().classes("w-full h-40").style("width: 100%;")
         
-        # 初始化文件模式
-        self._switch_to_file_mode()
-    
-    def _switch_to_file_mode(self):
-        """切换到文件选择模式"""
+    def _set_file_mode(self):
+        """设置为文件模式（显示路径输入对话框）"""
         self.is_file_mode = True
         self.file_btn.classes("active", remove="")
         self.folder_btn.classes(remove="active")
-        self.file_upload.style("display: block")
-        self.folder_hint.style("display: none")
-        self.selected_files = []
-        self.selected_file_names = {}
-        self.selected_files_label.text = "未选择任何文件"
-        self.selected_files_label.classes("empty", remove="")
+        # 显示路径输入对话框
+        self._show_path_input_dialog()
     
-    def _switch_to_folder_mode(self):
-        """切换到文件夹选择模式"""
+    def _set_folder_mode(self):
+        """设置为文件夹模式（显示路径输入对话框）"""
         self.is_file_mode = False
         self.folder_btn.classes("active", remove="")
         self.file_btn.classes(remove="active")
-        self.folder_hint.style("display: block")
-        self.file_upload.style("display: block")  # 仍然使用文件上传，但提示选择文件夹中的所有文件
-        self.selected_files = []
-        self.selected_file_names = {}
-        self.selected_files_label.text = "未选择任何文件夹"
-        self.selected_files_label.classes("empty", remove="")
-        ui.notify("提示：请选择文件夹中的所有 FLAC 文件", type="info")
+        # 显示路径输入对话框
+        self._show_path_input_dialog()
+    
+    def _show_path_input_dialog(self):
+        """显示路径输入对话框"""
+        mode_text = "文件" if self.is_file_mode else "文件夹"
+        placeholder = f"请输入 FLAC {mode_text}路径" + ("（多个文件用分号;分隔）" if self.is_file_mode else "")
+        
+        with ui.dialog() as dialog, ui.card().style("min-width: 400px;"):
+            ui.label(f"请输入 {mode_text}路径").classes("text-h6")
+            path_input = ui.input(
+                label="路径",
+                placeholder=placeholder,
+                value=self.file_path_input.value if self.file_path_input.value else ""
+            ).classes("w-full")
+            
+            with ui.row().classes("w-full justify-end gap-2 mt-4"):
+                ui.button("取消", on_click=dialog.close).props("outline")
+                def confirm():
+                    if path_input.value:
+                        self.file_path_input.value = path_input.value
+                        self._parse_and_validate_path()
+                    dialog.close()
+                ui.button("确定", on_click=confirm).props("color=primary")
+        
+        dialog.open()
+    
+    def _parse_and_validate_path(self):
+        """解析并验证输入的路径"""
+        if not self.file_path_input or not self.file_path_input.value:
+            path_str = ""
+        else:
+            path_str = self.file_path_input.value.strip()
+        
+        if not path_str:
+            self.selected_files_label.text = "未选择任何文件"
+            self.selected_files_label.classes("empty", remove="")
+            self.selected_files = []
+            return
+        
+        try:
+            if self.is_file_mode:
+                # 文件模式：支持多个文件路径（用分号分隔）
+                paths = [p.strip() for p in path_str.split(';') if p.strip()]
+                file_paths = []
+                
+                for p in paths:
+                    path = Path(p)
+                    if path.exists() and path.is_file():
+                        if path.suffix.lower() == '.flac':
+                            file_paths.append(path)
+                        else:
+                            logger.warning(f"跳过非 FLAC 文件: {path.name}")
+                    else:
+                        logger.warning(f"文件不存在: {path}")
+                
+                self.selected_files = file_paths
+                
+                if file_paths:
+                    total = len(file_paths)
+                    if total <= 3:
+                        file_names = ", ".join([f.name for f in file_paths])
+                        display_text = f"已选择 {total} 个文件: {file_names}"
+                    else:
+                        first_three = ", ".join([f.name for f in file_paths[:3]])
+                        display_text = f"已选择 {total} 个文件: {first_three} ... (还有 {total - 3} 个文件)"
+                    self.selected_files_label.text = display_text
+                    self.selected_files_label.classes(remove="empty")
+                    ui.notify(f"已选择 {total} 个文件", type="positive")
+                else:
+                    self.selected_files_label.text = "未找到有效的 FLAC 文件"
+                    self.selected_files_label.classes("empty", remove="")
+                    ui.notify("未找到有效的 FLAC 文件", type="warning")
+            else:
+                # 文件夹模式
+                folder_path = Path(path_str)
+                if folder_path.exists() and folder_path.is_dir():
+                    # 查找文件夹中的所有 FLAC 文件
+                    flac_files = list(folder_path.rglob("*.flac")) + list(folder_path.rglob("*.FLAC"))
+                    self.selected_files = flac_files
+                    
+                    if flac_files:
+                        total = len(flac_files)
+                        folder_name = folder_path.name
+                        display_text = f"已选择文件夹: {folder_name} (包含 {total} 个 FLAC 文件)"
+                        self.selected_files_label.text = display_text
+                        self.selected_files_label.classes(remove="empty")
+                        ui.notify(f"已找到 {total} 个 FLAC 文件", type="positive")
+                    else:
+                        self.selected_files_label.text = f"文件夹 '{folder_name}' 中未找到 FLAC 文件"
+                        self.selected_files_label.classes(remove="empty")
+                        ui.notify(f"文件夹 '{folder_name}' 中未找到 FLAC 文件", type="warning")
+                else:
+                    ui.notify(f"文件夹不存在: {folder_path}", type="negative")
+                    self.selected_files_label.text = "文件夹不存在"
+                    self.selected_files_label.classes(remove="empty")
+                    self.selected_files = []
+        
+        except Exception as e:
+            logger.error(f"解析路径失败: {e}", exc_info=True)
+            ui.notify(f"路径解析失败: {str(e)}", type="negative")
+            self.selected_files_label.text = "路径格式错误"
+            self.selected_files_label.classes("empty", remove="")
+            self.selected_files = []
     
     def _validate_output_dir(self, e=None):
         """验证输出目录路径"""
@@ -472,31 +600,22 @@ class ConverterUI:
         self.log_area.clear()
         
         try:
-            # 收集所有需要转换的文件
-            # self.selected_files 中存储的是 Path 对象
+            # 直接使用选择的文件路径（已经是本地路径，不需要上传）
             all_flac_files = []
             
             print(f"\n[DEBUG] ===== 开始转换 =====")
             print(f"[DEBUG] 已选择的文件数: {len(self.selected_files)}")
             
             for idx, file_path in enumerate(self.selected_files):
-                # 获取原始文件名
-                original_name = self.selected_file_names.get(file_path, file_path.name)
+                print(f"[DEBUG] 检查文件 {idx + 1}: {file_path}")
                 
-                print(f"[DEBUG] 检查文件 {idx + 1}:")
-                print(f"[DEBUG]   临时路径: {file_path}")
-                print(f"[DEBUG]   原始文件名: {original_name}")
-                print(f"[DEBUG]   文件存在: {file_path.exists()}")
-                print(f"[DEBUG]   是文件: {file_path.is_file()}")
-                
-                # 确保文件存在且是文件
+                # 确保文件存在且是 FLAC 文件
                 if file_path.exists() and file_path.is_file():
-                    # 使用原始文件名判断是否为 FLAC 文件
-                    if original_name.lower().endswith('.flac'):
+                    if file_path.suffix.lower() == '.flac':
                         all_flac_files.append(file_path)
-                        print(f"[INFO] ✓ 添加文件: {original_name}")
+                        print(f"[INFO] ✓ 添加文件: {file_path.name}")
                     else:
-                        print(f"[WARNING] ✗ 跳过非 FLAC 文件: {original_name}")
+                        print(f"[WARNING] ✗ 跳过非 FLAC 文件: {file_path.name}")
                 else:
                     print(f"[ERROR] ✗ 文件不存在或不是文件: {file_path}")
             
