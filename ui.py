@@ -315,8 +315,8 @@ class ConverterUI:
                     self.file_btn = ui.button("选择文件", on_click=self._set_file_mode).classes("file-btn").style("width: 180px; min-width: 180px; max-width: 180px;")
                     self.folder_btn = ui.button("选择文件夹", on_click=self._set_folder_mode).classes("file-btn").style("width: 180px; min-width: 180px; max-width: 180px;")
             
-            # 进度条
-            self.progress_bar = ui.linear_progress(show_value=False).classes("w-full mt-4").style("width: 100%; visibility: hidden;")
+            # 进度条（初始隐藏，转换时显示）
+            self.progress_bar = ui.linear_progress(value=0.0, show_value=False).classes("w-full mt-4").style("width: 100%; display: none;")
             
             # 状态标签（支持多行显示）
             self.status_label = ui.label("").classes("text-center mt-2").style("text-align: center; width: 100%; white-space: pre-line;")
@@ -634,12 +634,23 @@ class ConverterUI:
         # 更新 UI 状态
         self.is_converting = True
         self.client_disconnected = False  # 重置客户端断开标志
-        self._safe_update_ui(lambda: self.convert_btn.disable())
-        self._safe_update_ui(lambda: setattr(self.convert_btn, 'text', "转换中..."))
-        # 显示进度条（使用 visibility 而不是 display，避免布局问题）
-        self._safe_update_ui(lambda: self.progress_bar.style("visibility: visible;"))
-        self._safe_update_ui(lambda: setattr(self.progress_bar, 'value', 0))
-        self._safe_update_ui(lambda: setattr(self.status_label, 'text', "准备开始转换..."))
+        
+        # 直接更新UI元素，不使用lambda包装
+        try:
+            self.convert_btn.disable()
+            self.convert_btn.text = "转换中..."
+            # 显示进度条并设置为0
+            self.progress_bar.style("display: block;")
+            self.progress_bar.value = 0.0
+            self.status_label.text = "准备开始转换..."
+            # 确保UI更新（给浏览器时间渲染）
+            await asyncio.sleep(0.1)
+        except RuntimeError as e:
+            if "client" in str(e).lower() or "deleted" in str(e).lower():
+                self.client_disconnected = True
+                logger.info("客户端已断开连接")
+                return
+            raise
         
         try:
             # 直接使用选择的文件路径（已经是本地路径，不需要上传）
@@ -703,7 +714,10 @@ class ConverterUI:
                 return
             
             total = len(all_flac_files)
-            self._safe_update_ui(lambda: setattr(self.status_label, 'text', f"准备转换 {total} 个文件..."))
+            try:
+                self.status_label.text = f"准备转换 {total} 个文件..."
+            except RuntimeError:
+                pass  # 客户端已断开，忽略
             
             # 转换文件
             converted_count = 0
@@ -716,9 +730,16 @@ class ConverterUI:
                     progress_percent = int(progress * 100)
                     status_text = f"正在转换: {flac_file.name} ({idx}/{total}) - {progress_percent}%"
                     
-                    # 安全更新UI元素（使用默认参数避免闭包问题）
-                    self._safe_update_ui(lambda p=progress: setattr(self.progress_bar, 'value', p))
-                    self._safe_update_ui(lambda text=status_text: setattr(self.status_label, 'text', text))
+                    # 直接更新UI元素（不使用lambda，确保响应式更新）
+                    try:
+                        self.progress_bar.value = progress
+                        self.status_label.text = status_text
+                    except RuntimeError as e:
+                        if "client" in str(e).lower() or "deleted" in str(e).lower():
+                            self.client_disconnected = True
+                            logger.info("客户端已断开连接")
+                        else:
+                            logger.error(f"更新进度时出错: {e}")
                     
                     # 执行转换，输出到 mp3 目录
                     output_file = self.converter.convert_file(
@@ -731,10 +752,13 @@ class ConverterUI:
                     
                     # 更新进度状态（转换成功后）
                     success_status_text = f"已转换 {idx}/{total} 个文件 ({progress_percent}%) - 当前: {flac_file.name}"
-                    self._safe_update_ui(lambda text=success_status_text: setattr(self.status_label, 'text', text))
+                    try:
+                        self.status_label.text = success_status_text
+                    except RuntimeError:
+                        pass  # 客户端已断开，忽略
                     
-                    # 让 UI 更新
-                    await asyncio.sleep(0.01)
+                    # 让 UI 更新（给浏览器时间渲染）
+                    await asyncio.sleep(0.1)
                     
                 except Exception as e:
                     failed_count += 1
@@ -744,29 +768,38 @@ class ConverterUI:
                     # 更新进度状态（即使失败也更新）
                     progress_percent = int((idx / total) * 100)
                     error_status_text = f"已处理 {idx}/{total} 个文件 ({progress_percent}%) - 当前失败: {flac_file.name}"
-                    self._safe_update_ui(lambda text=error_status_text: setattr(self.status_label, 'text', text))
+                    try:
+                        self.status_label.text = error_status_text
+                    except RuntimeError:
+                        pass  # 客户端已断开，忽略
             
             # 转换完成
-            self._safe_update_ui(lambda: setattr(self.progress_bar, 'value', 1.0))
-            
-            # 生成完成提示信息
-            if failed_count == 0:
-                completion_msg = f"✅ 转换完成！成功转换 {converted_count} 个文件"
-                completion_detail = f"所有文件已保存到: {mp3_output_dir}"
-                final_status_text = f"{completion_msg}\n{completion_detail}"
-                self._safe_update_ui(lambda text=final_status_text: setattr(self.status_label, 'text', text))
-                self._safe_update_ui(lambda msg=completion_msg: ui.notify(msg, type="positive", timeout=5))
-            else:
-                completion_msg = f"⚠️ 转换完成：成功 {converted_count} 个，失败 {failed_count} 个"
-                completion_detail = f"成功文件已保存到: {mp3_output_dir}"
-                final_status_text = f"{completion_msg}\n{completion_detail}"
-                self._safe_update_ui(lambda text=final_status_text: setattr(self.status_label, 'text', text))
-                self._safe_update_ui(lambda msg=completion_msg: ui.notify(msg, type="warning", timeout=5))
+            try:
+                self.progress_bar.value = 1.0
+                
+                # 生成完成提示信息
+                if failed_count == 0:
+                    completion_msg = f"✅ 转换完成！成功转换 {converted_count} 个文件"
+                    completion_detail = f"所有文件已保存到: {mp3_output_dir}"
+                    final_status_text = f"{completion_msg}\n{completion_detail}"
+                    self.status_label.text = final_status_text
+                    ui.notify(completion_msg, type="positive", timeout=5000)
+                else:
+                    completion_msg = f"⚠️ 转换完成：成功 {converted_count} 个，失败 {failed_count} 个"
+                    completion_detail = f"成功文件已保存到: {mp3_output_dir}"
+                    final_status_text = f"{completion_msg}\n{completion_detail}"
+                    self.status_label.text = final_status_text
+                    ui.notify(completion_msg, type="warning", timeout=5000)
+            except RuntimeError:
+                pass  # 客户端已断开，忽略
             
         except Exception as e:
             error_msg = f"❌ 转换过程出错: {str(e)}"
-            self._safe_update_ui(lambda text=error_msg: setattr(self.status_label, 'text', text), silent=True)
-            self._safe_update_ui(lambda msg=error_msg: ui.notify(msg, type="negative", timeout=5), silent=True)
+            try:
+                self.status_label.text = error_msg
+                ui.notify(error_msg, type="negative", timeout=5000)
+            except RuntimeError:
+                pass  # 客户端已断开，忽略
             logger.error(error_msg, exc_info=True)
         
         finally:
@@ -779,8 +812,8 @@ class ConverterUI:
                     self.convert_btn.text = "开始转换"
                     # 保持进度条和状态标签显示一段时间，让用户看到完成信息
                     await asyncio.sleep(3)
-                    # 隐藏进度条（但保留布局空间）
-                    self.progress_bar.style("visibility: hidden;")
+                    # 隐藏进度条
+                    self.progress_bar.style("display: none;")
                 except RuntimeError as e:
                     # 如果客户端已断开，只记录日志
                     if "client" in str(e).lower() or "deleted" in str(e).lower():
