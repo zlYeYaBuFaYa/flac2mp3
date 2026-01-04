@@ -4,6 +4,7 @@
 """
 import os
 import subprocess
+import asyncio
 import shutil
 from pathlib import Path
 from typing import List, Optional, Callable
@@ -42,7 +43,7 @@ class AudioConverter:
         
         return flac_files
     
-    def convert_file(
+    async def convert_file(
         self,
         input_file: Path,
         output_dir: Optional[Path] = None,
@@ -50,7 +51,7 @@ class AudioConverter:
         progress_callback: Optional[Callable[[str, int, int], None]] = None
     ) -> Path:
         """
-        转换单个 FLAC 文件为 MP3
+        转换单个 FLAC 文件为 MP3（异步版本，不阻塞事件循环）
         
         Args:
             input_file: 输入的 FLAC 文件路径
@@ -81,31 +82,50 @@ class AudioConverter:
             str(output_file)
         ]
         
+        process = None
         try:
-            # 执行转换
-            # 在Windows上处理编码问题：使用UTF-8编码，如果失败则使用errors='ignore'
+            # 使用异步子进程执行转换，避免阻塞事件循环
+            # 这样可以在转换期间处理 WebSocket 心跳，防止客户端断开连接
             import sys
             encoding = 'utf-8' if sys.platform != 'win32' else 'utf-8'
             
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding=encoding,
-                errors='replace',  # 遇到无法解码的字符时替换为替换字符，而不是抛出异常
-                check=True
+            # 创建异步子进程
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
+            
+            # 等待进程完成，在此期间事件循环可以处理其他任务（如 WebSocket 心跳）
+            stdout, stderr = await process.communicate()
+            
+            # 检查返回码
+            if process.returncode != 0:
+                # 安全地解码错误信息
+                try:
+                    stderr_msg = stderr.decode(encoding, errors='replace') if stderr else str(process.returncode)
+                except (UnicodeDecodeError, AttributeError):
+                    stderr_msg = "无法解码错误信息（编码问题）"
+                error_msg = f"转换失败: {input_file.name}\n错误信息: {stderr_msg}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
+            
             logger.info(f"转换成功: {input_file.name} -> {output_file.name}")
             return output_file
-        except subprocess.CalledProcessError as e:
-            # 安全地获取错误信息，避免编码问题
-            try:
-                stderr_msg = e.stderr if e.stderr else str(e)
-            except (UnicodeDecodeError, AttributeError):
-                stderr_msg = "无法解码错误信息（编码问题）"
-            error_msg = f"转换失败: {input_file.name}\n错误信息: {stderr_msg}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
+        except asyncio.CancelledError:
+            # 如果任务被取消，尝试终止子进程
+            if process is not None:
+                try:
+                    process.terminate()
+                    await process.wait()
+                except Exception:
+                    pass
+            raise
+        except Exception as e:
+            # 如果不是预期的异常，记录并重新抛出
+            if not isinstance(e, (RuntimeError, FileNotFoundError, asyncio.CancelledError)):
+                logger.error(f"转换过程中出现意外错误: {input_file.name} - {str(e)}", exc_info=True)
+            raise
     
     def convert_files(
         self,

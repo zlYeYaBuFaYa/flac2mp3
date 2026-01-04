@@ -724,6 +724,11 @@ class ConverterUI:
             failed_count = 0
             
             for idx, flac_file in enumerate(all_flac_files, 1):
+                # 检查客户端是否已断开
+                if self.client_disconnected:
+                    logger.info(f"客户端已断开，停止转换。已处理 {idx - 1}/{total} 个文件")
+                    break
+                
                 try:
                     # 更新进度（0-1之间的值）
                     progress = idx / total
@@ -738,11 +743,16 @@ class ConverterUI:
                         if "client" in str(e).lower() or "deleted" in str(e).lower():
                             self.client_disconnected = True
                             logger.info("客户端已断开连接")
+                            break
                         else:
                             logger.error(f"更新进度时出错: {e}")
                     
-                    # 执行转换，输出到 mp3 目录
-                    output_file = self.converter.convert_file(
+                    # 在转换前让出控制权，让事件循环处理 WebSocket 心跳
+                    await asyncio.sleep(0.05)
+                    
+                    # 执行转换（异步版本，不会阻塞事件循环）
+                    # 使用 await 调用异步方法，这样在转换过程中事件循环可以处理其他任务
+                    output_file = await self.converter.convert_file(
                         flac_file,
                         output_dir=mp3_output_dir,  # 使用 mp3 目录
                         bitrate=bitrate
@@ -753,13 +763,22 @@ class ConverterUI:
                     # 更新进度状态（转换成功后）
                     success_status_text = f"已转换 {idx}/{total} 个文件 ({progress_percent}%) - 当前: {flac_file.name}"
                     try:
-                        self.status_label.text = success_status_text
-                    except RuntimeError:
-                        pass  # 客户端已断开，忽略
+                        if not self.client_disconnected:
+                            self.status_label.text = success_status_text
+                    except RuntimeError as e:
+                        if "client" in str(e).lower() or "deleted" in str(e).lower():
+                            self.client_disconnected = True
+                            logger.info("客户端已断开连接")
+                            break
                     
-                    # 让 UI 更新（给浏览器时间渲染）
+                    # 让 UI 更新（给浏览器时间渲染和处理 WebSocket）
+                    # 定期让出控制权，保持 WebSocket 连接活跃
                     await asyncio.sleep(0.1)
                     
+                except asyncio.CancelledError:
+                    # 任务被取消
+                    logger.info("转换任务被取消")
+                    break
                 except Exception as e:
                     failed_count += 1
                     error_msg = f"✗ 失败: {flac_file.name} - {str(e)}"
@@ -769,9 +788,16 @@ class ConverterUI:
                     progress_percent = int((idx / total) * 100)
                     error_status_text = f"已处理 {idx}/{total} 个文件 ({progress_percent}%) - 当前失败: {flac_file.name}"
                     try:
-                        self.status_label.text = error_status_text
-                    except RuntimeError:
-                        pass  # 客户端已断开，忽略
+                        if not self.client_disconnected:
+                            self.status_label.text = error_status_text
+                    except RuntimeError as e:
+                        if "client" in str(e).lower() or "deleted" in str(e).lower():
+                            self.client_disconnected = True
+                            logger.info("客户端已断开连接")
+                            break
+                    
+                    # 即使失败也要让出控制权
+                    await asyncio.sleep(0.1)
             
             # 转换完成
             try:
